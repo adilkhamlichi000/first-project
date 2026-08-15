@@ -43,6 +43,14 @@
       line-height: 1.6;
     }
 
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
     button {
       padding: 14px 24px;
       border: 0;
@@ -65,12 +73,22 @@
     <p>For my three kbidates diali: Kenza, Kams et Lilya! ❤️</p>
     <p><strong>@Kamélia</strong>, on va créer pas mal de choses avec l’IA les deux prochaines semaines.</p>
     <p><strong>@Lilya</strong>, on va faire beaucoup de dessins pour maman.</p>
-    <button type="button" onclick="direBonjour()">Clique ici</button>
+    <div class="buttons">
+      <button type="button" onclick="afficherMessage('kenza')">Kenza</button>
+      <button type="button" onclick="afficherMessage('kamelia')">Kamélia</button>
+      <button type="button" onclick="afficherMessage('lilya')">Lilya</button>
+    </div>
   </main>
 
   <script>
-    function direBonjour() {
-      alert("Bravo Adil ! Ton premier site fonctionne.");
+    function afficherMessage(personne) {
+      const messages = {
+        kenza: "Kenza ❤️ Merci d’être une maman extraordinaire !",
+        kamelia: "Kamélia ✨ On va créer plein de choses avec l’IA !",
+        lilya: "Lilya 🎨 On va faire beaucoup de dessins pour maman !"
+      };
+
+      alert(messages[personne]);
     }
   </script>
 </body>
