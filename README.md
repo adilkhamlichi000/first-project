@@ -1,2 +1,3 @@
 # first-project
-c est mon premier projet
+
+Ceci est mon premier projet GitHub. J’apprends à utiliser GitHub avec ChatGPT.
