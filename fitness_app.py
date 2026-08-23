@@ -6,7 +6,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Fitness Coach HD", page_icon="💪", layout="centered")
 
-API_URL = "https://exercise-database.zenithfits.com/api/v1/exercises?limit=317"
+DATA_URL = "https://raw.githubusercontent.com/harshvishu/free-exercise-db-with-videos/main/data/exercises.json"
 
 
 def check_password() -> bool:
@@ -23,8 +23,8 @@ def check_password() -> bool:
     return False
 
 
-# On utilise uniquement des exercices présents dans le catalogue HD de test.
-# Le nom anglais sert à retrouver automatiquement la vidéo ; le reste est affiché en français.
+# Exercices du prototype HD. Le nom anglais sert à retrouver la vidéo dans
+# le fichier statique GitHub, sans dépendre de l'ancienne API hébergée.
 EXERCISES = {
     "Échauffement": [
         ("Échauffement épaules", "Band Shoulder Warm-Up Stretch", "Mobilise les épaules sans forcer.", 35),
@@ -33,14 +33,14 @@ EXERCISES = {
     ],
     "Renforcement": [
         ("Squats", "Squat", "Poitrine haute, genoux dans l’axe des pieds, pousse les hanches vers l’arrière.", 40),
-        ("Pompes", "Deep Push-Up", "Corps gainé, descends sous contrôle et pousse sans creuser le dos.", 35),
+        ("Pompes", "Push-Up", "Corps gainé, descends sous contrôle et pousse sans creuser le dos.", 35),
         ("Pont fessier", "Bridge Pose (Setu Bandhasana)", "Pousse dans les talons et serre les fessiers en haut.", 40),
         ("Étirement en position quadrupède", "All Fours Groin Stretch", "Bouge lentement et reste dans une amplitude confortable.", 40),
     ],
     "Cardio": [
         ("Jumping jacks", "Jumping Jack", "Garde un rythme régulier et atterris souplement.", 40),
         ("Burpees", "Burpee", "Reste contrôlé ; ralentis ou enlève le saut si nécessaire.", 30),
-        ("Course sur place", "Running", "Buste droit, bras actifs, cadence confortable.", 45),
+        ("Cardio léger", "Cardio Exercise", "Buste droit, bras actifs, cadence confortable.", 45),
     ],
     "Mobilité": [
         ("Étirement fléchisseurs de hanche", "Standing Hip Flexor and Abdominal Stretch", "Bassin légèrement rentré, ne cambre pas le bas du dos.", 40),
@@ -49,19 +49,18 @@ EXERCISES = {
         ("Étirement adducteurs", "All Fours Groin Stretch", "Respire calmement et garde une amplitude confortable.", 40),
     ],
     "Haltères": [
+        ("Élévations latérales haltères", "Dumbbell Lateral Raise", "Garde les épaules basses et monte les bras sans élan.", 35),
         ("Développé épaules haltères", "Dumbbell Alternating Shoulder Press", "Abdos serrés, pousse au-dessus de la tête sans cambrer.", 35),
-        ("Rowing haltères", "Dumbbell Bent-Over Row", "Dos long, tire les coudes vers l’arrière sans hausser les épaules.", 40),
     ],
 }
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def load_catalogue():
-    response = requests.get(API_URL, timeout=20)
+    response = requests.get(DATA_URL, timeout=30)
     response.raise_for_status()
     payload = response.json()
-    data = payload.get("data", [])
-    return data if isinstance(data, list) else []
+    return payload if isinstance(payload, list) else []
 
 
 def normalize(text: str) -> str:
@@ -71,22 +70,18 @@ def normalize(text: str) -> str:
 def find_exercise(catalogue, api_name: str):
     target = normalize(api_name)
 
-    # Exact match first.
     for item in catalogue:
         if normalize(item.get("name", "")) == target:
             return item
 
-    # Then aliases.
     for item in catalogue:
-        aliases = item.get("aliases", []) or []
-        for alias in aliases:
+        for alias in item.get("aliases", []) or []:
             if normalize(str(alias)) == target:
                 return item
 
-    # Last resort: contained-name match.
     for item in catalogue:
         candidate = normalize(item.get("name", ""))
-        if target in candidate or candidate in target:
+        if target and candidate and (target in candidate or candidate in target):
             return item
 
     return None
@@ -138,7 +133,7 @@ def build_session(goal: str, duration: int, level: str, equipment: str):
 
 
 st.title("💪 Fitness Coach HD")
-st.caption("Prototype avec vraies démonstrations vidéo Full‑HD directement dans l’app")
+st.caption("Vraies démonstrations vidéo Full‑HD directement dans l’app")
 
 if not check_password():
     st.stop()
@@ -154,7 +149,7 @@ try:
         catalogue = load_catalogue()
 except Exception as exc:
     catalogue = []
-    st.error(f"Le catalogue HD n’a pas pu être chargé pour le moment : {exc}")
+    st.error(f"Le catalogue HD n’a pas pu être chargé : {exc}")
 
 if catalogue:
     st.success(f"Catalogue HD chargé : {len(catalogue)} exercices")
@@ -201,7 +196,7 @@ if workout:
     st.subheader("🎥 Suis le coach")
     if video_url:
         st.video(video_url, autoplay=True, loop=True, muted=True, width="stretch")
-        st.caption("Mode prototype HD : version féminine utilisée en priorité pour garder le rendu le plus cohérent possible.")
+        st.caption("Version féminine utilisée en priorité pour garder le rendu cohérent.")
     else:
         st.warning("Vidéo HD non trouvée pour ce mouvement dans le catalogue de test.")
 
@@ -227,6 +222,5 @@ if workout:
         st.rerun()
 
 st.caption(
-    "Version HD prototype — vidéos chargées à distance pour évaluation. "
-    "Avant une diffusion publique/commerciale, nous choisirons une bibliothèque avec licence et provenance vidéo clairement garanties."
+    "Prototype HD — données chargées depuis le fichier statique GitHub, sans dépendance à l’ancienne API."
 )
