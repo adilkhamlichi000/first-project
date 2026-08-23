@@ -1,10 +1,9 @@
 import hmac
-import io
+import json
 
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
-from gtts import gTTS
 
 
 st.set_page_config(page_title="Fitness Coach", page_icon="💪", layout="centered")
@@ -61,51 +60,6 @@ def load_gif(filename: str):
         return None
 
 
-@st.cache_data(ttl=86400, show_spinner=False, max_entries=40)
-def make_voice_mp3(name: str, instruction: str, seconds: int):
-    """Crée une vraie piste MP3 française au lieu d'utiliser la voix Safari."""
-    text = f"{name}. {instruction} Fais ce mouvement pendant {seconds} secondes."
-    try:
-        buffer = io.BytesIO()
-        gTTS(text=text, lang="fr", slow=False).write_to_fp(buffer)
-        return buffer.getvalue()
-    except Exception:
-        return None
-
-
-def background_music_engine():
-    """Musique cachée en fond, avec reprise de la position entre les reruns."""
-    components.html(
-        f"""
-        <audio id="fitnessMusic" loop preload="auto" playsinline style="display:none;">
-          <source src="{MUSIC_URL}" type="audio/mpeg">
-        </audio>
-        <script>
-          const music = document.getElementById('fitnessMusic');
-          music.volume = 0.08;
-
-          try {{
-            const saved = parseFloat(localStorage.getItem('fitnessMusicTime') || '0');
-            if (Number.isFinite(saved) && saved > 0) music.currentTime = saved;
-          }} catch (e) {{}}
-
-          function saveTime() {{
-            try {{ localStorage.setItem('fitnessMusicTime', String(music.currentTime || 0)); }} catch (e) {{}}
-          }}
-
-          music.addEventListener('timeupdate', saveTime);
-          music.addEventListener('pause', saveTime);
-          window.addEventListener('beforeunload', saveTime);
-
-          music.play().catch(() => {{
-            document.addEventListener('pointerdown', () => music.play().catch(() => {{}}), {{once:true}});
-          }});
-        </script>
-        """,
-        height=0,
-    )
-
-
 def adjusted_seconds(seconds: int, level: str) -> int:
     if level == "Débutant":
         return max(20, seconds - 5)
@@ -152,17 +106,172 @@ def next_readable(workout, start_index: int):
     return None, None
 
 
-st.markdown(
-    """
-    <style>
-      div[data-testid="stAudio"] {display:none !important;}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+def coach_text(exercise):
+    name, _, instruction, seconds = exercise
+    return f"{name}. {instruction} Fais ce mouvement pendant {seconds} secondes."
+
+
+def install_start_audio(first_exercise):
+    """Démarre musique + première consigne pendant le clic Créer la séance."""
+    text = json.dumps(coach_text(first_exercise), ensure_ascii=False)
+    music_url = json.dumps(MUSIC_URL)
+
+    components.html(
+        f"""
+        <script>
+        (() => {{
+          const P = window.parent;
+          const D = P.document;
+
+          function getMusic() {{
+            let audio = D.getElementById('fitnessGlobalMusic');
+            if (!audio) {{
+              audio = D.createElement('audio');
+              audio.id = 'fitnessGlobalMusic';
+              audio.src = {music_url};
+              audio.loop = true;
+              audio.preload = 'auto';
+              audio.playsInline = true;
+              audio.style.display = 'none';
+              audio.volume = 0.08;
+              D.body.appendChild(audio);
+            }}
+            return audio;
+          }}
+
+          function speak(text) {{
+            try {{
+              const synth = P.speechSynthesis;
+              if (!synth || !P.SpeechSynthesisUtterance) return;
+              synth.cancel();
+              const u = new P.SpeechSynthesisUtterance(text);
+              u.lang = 'fr-FR';
+              u.rate = 0.92;
+              u.pitch = 1.0;
+              u.volume = 1.0;
+              const voices = synth.getVoices();
+              const fr = voices.find(v => (v.lang || '').toLowerCase().startsWith('fr'));
+              if (fr) u.voice = fr;
+              const music = getMusic();
+              u.onstart = () => {{ music.volume = 0.025; }};
+              u.onend = () => {{ music.volume = 0.08; }};
+              u.onerror = () => {{ music.volume = 0.08; }};
+              synth.speak(u);
+            }} catch (e) {{}}
+          }}
+
+          if (P.__fitnessStartHandler) {{
+            D.removeEventListener('click', P.__fitnessStartHandler, true);
+          }}
+
+          P.__fitnessStartHandler = (event) => {{
+            const button = event.target.closest ? event.target.closest('button') : null;
+            if (!button) return;
+            const label = (button.innerText || button.textContent || '').trim();
+            if (!label.includes('Créer la séance')) return;
+
+            const music = getMusic();
+            music.play().catch(() => {{}});
+            P.__fitnessSessionActive = true;
+            speak({text});
+          }};
+
+          D.addEventListener('click', P.__fitnessStartHandler, true);
+        }})();
+        </script>
+        """,
+        height=0,
+    )
+
+
+def install_navigation_audio(workout, idx):
+    """Lit la prochaine/précédente consigne pendant le clic, avant le rerun Streamlit."""
+    current = coach_text(workout[idx])
+    next_text = coach_text(workout[idx + 1]) if idx + 1 < len(workout) else "Séance terminée. Bravo."
+    previous_text = coach_text(workout[idx - 1]) if idx > 0 else current
+    first_text = coach_text(workout[0])
+
+    payload = {
+        "current": current,
+        "next": next_text,
+        "previous": previous_text,
+        "first": first_text,
+    }
+    safe = json.dumps(payload, ensure_ascii=False)
+    music_url = json.dumps(MUSIC_URL)
+
+    components.html(
+        f"""
+        <script>
+        (() => {{
+          const P = window.parent;
+          const D = P.document;
+          const texts = {safe};
+
+          function getMusic() {{
+            let audio = D.getElementById('fitnessGlobalMusic');
+            if (!audio) {{
+              audio = D.createElement('audio');
+              audio.id = 'fitnessGlobalMusic';
+              audio.src = {music_url};
+              audio.loop = true;
+              audio.preload = 'auto';
+              audio.playsInline = true;
+              audio.style.display = 'none';
+              audio.volume = 0.08;
+              D.body.appendChild(audio);
+            }}
+            return audio;
+          }}
+
+          function speak(text) {{
+            try {{
+              const synth = P.speechSynthesis;
+              if (!synth || !P.SpeechSynthesisUtterance) return;
+              synth.cancel();
+              const u = new P.SpeechSynthesisUtterance(text);
+              u.lang = 'fr-FR';
+              u.rate = 0.92;
+              u.pitch = 1.0;
+              u.volume = 1.0;
+              const voices = synth.getVoices();
+              const fr = voices.find(v => (v.lang || '').toLowerCase().startsWith('fr'));
+              if (fr) u.voice = fr;
+              const music = getMusic();
+              u.onstart = () => {{ music.volume = 0.025; }};
+              u.onend = () => {{ music.volume = 0.08; }};
+              u.onerror = () => {{ music.volume = 0.08; }};
+              synth.speak(u);
+            }} catch (e) {{}}
+          }}
+
+          const music = getMusic();
+          if (P.__fitnessSessionActive) music.play().catch(() => {{}});
+
+          if (P.__fitnessNavHandler) {{
+            D.removeEventListener('click', P.__fitnessNavHandler, true);
+          }}
+
+          P.__fitnessNavHandler = (event) => {{
+            const button = event.target.closest ? event.target.closest('button') : null;
+            if (!button) return;
+            const label = (button.innerText || button.textContent || '').trim();
+
+            if (label.includes('Suivant')) speak(texts.next);
+            else if (label.includes('Précédent')) speak(texts.previous);
+            else if (label.includes('Recommencer')) speak(texts.first);
+          }};
+
+          D.addEventListener('click', P.__fitnessNavHandler, true);
+        }})();
+        </script>
+        """,
+        height=0,
+    )
+
 
 st.title("💪 Fitness Coach")
-st.caption("Démonstrations animées + musique automatique + vraies instructions audio en français")
+st.caption("Démonstrations animées + musique automatique + coach vocal français")
 
 if not check_password():
     st.stop()
@@ -182,8 +291,12 @@ level = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Avancé"])
 duration = st.select_slider("Durée", options=[10, 15, 20, 30, 45], value=20, format_func=lambda x: f"{x} min")
 equipment = st.selectbox("Matériel", ["Aucun", "Haltères légers"])
 
+# Le premier message vocal est préparé AVANT le bouton : le clic lui-même autorise le son sur iPhone.
+preview_workout = build_session(goal, duration, level, equipment)
+install_start_audio(preview_workout[0])
+
 if st.button("Créer la séance", type="primary", use_container_width=True):
-    workout = build_session(goal, duration, level, equipment)
+    workout = preview_workout
     with st.spinner("Préparation de la première démonstration…"):
         first_idx, first_gif = next_readable(workout, 0)
 
@@ -217,6 +330,8 @@ if workout:
         st.error("Aucune autre démonstration disponible dans cette séance.")
         st.stop()
 
+    install_navigation_audio(workout, idx)
+
     st.divider()
     st.caption(
         f"{meta.get('goal', '')} • {meta.get('duration', '')} min • {meta.get('level', '')} • {meta.get('equipment', '')}"
@@ -226,17 +341,6 @@ if workout:
     st.header(name)
     st.metric("Durée", f"{seconds} sec")
     st.info(instruction)
-
-    # Musique de fond automatique.
-    background_music_engine()
-
-    # Vraie piste MP3 française. Streamlit la joue dans la page principale,
-    # ce qui est nettement plus fiable sur iPhone que speechSynthesis dans un iframe.
-    voice_mp3 = make_voice_mp3(name, instruction, seconds)
-    if voice_mp3:
-        st.audio(voice_mp3, format="audio/mp3", autoplay=True)
-    else:
-        st.warning("La voix n'a pas pu être générée pour cet exercice.")
 
     st.subheader("🎥 Suis le coach")
     st.image(gif_bytes, width="stretch")
