@@ -450,7 +450,7 @@ goal = st.selectbox(
     ["Forme générale", "Se muscler", "Cardio / brûler des calories", "Mobilité / récupération"],
 )
 level = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Avancé"])
-duration = st.select_slider("Durée", options=[10, 15, 20, 30, 45], value=20, format_func=lambda x: f"{x} min")
+duration = st.select_slider("Durée", options=[2, 10, 15, 20, 30, 45], value=20, format_func=lambda x: f"{x} min")
 equipment = st.selectbox("Matériel", ["Aucun", "Haltères légers"])
 weight_kg = st.number_input(
     "Poids (kg) — pour estimer les calories",
