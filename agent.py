@@ -5,7 +5,7 @@ from agents import Agent, Runner, WebSearchTool
 
 stock_analyst = Agent(
     name="Stock Analyst",
-    model="gpt-5.6-sol",
+    model="gpt-5.6-luna",
     instructions="""
 You are a cautious equity-research screening agent.
 
