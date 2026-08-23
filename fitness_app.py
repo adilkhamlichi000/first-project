@@ -130,7 +130,7 @@ def met_for_exercise(exercise, level: str) -> float:
 
 
 def calories_for_seconds(weight_kg: float, met: float, seconds: float) -> float:
-    # Formule standard d'estimation : kcal/min = MET × 3,5 × poids(kg) / 200.
+    # Estimation : kcal/min = MET × 3,5 × poids(kg) / 200.
     return met * 3.5 * weight_kg / 200.0 * (seconds / 60.0)
 
 
@@ -207,6 +207,10 @@ def install_start_audio(first_exercise):
             if (!label.includes('Créer la séance')) return;
 
             localStorage.setItem('fitnessMuted', '0');
+            localStorage.setItem('fitnessSessionStartedAt', String(Date.now()));
+            localStorage.removeItem('fitnessExerciseTimerKey');
+            localStorage.removeItem('fitnessExerciseStartedAt');
+
             const music = getMusic();
             music.currentTime = 0;
             music.volume = 0.16;
@@ -300,7 +304,12 @@ def install_navigation_audio(workout, idx):
 
             if (label.includes('Suivant')) speak(texts.next);
             else if (label.includes('Précédent')) speak(texts.previous);
-            else if (label.includes('Recommencer')) speak(texts.first);
+            else if (label.includes('Recommencer')) {{
+              localStorage.setItem('fitnessSessionStartedAt', String(Date.now()));
+              localStorage.removeItem('fitnessExerciseTimerKey');
+              localStorage.removeItem('fitnessExerciseStartedAt');
+              speak(texts.first);
+            }}
           }};
 
           P.__fitnessSoundHandler = (event) => {{
@@ -330,29 +339,78 @@ def install_navigation_audio(workout, idx):
 
 
 def install_auto_advance(idx: int, total: int, calories_before: float, current_kcal_30s: float):
-    """Compte 30 secondes, affiche les kcal en direct puis passe automatiquement au mouvement suivant."""
+    """Affiche temps séance + kcal + compte à rebours, puis avance automatiquement."""
     target_label = "Suivant" if idx < total - 1 else "Terminer"
-    timer_key = json.dumps(f"{idx}-{total}")
-    target = json.dumps(target_label)
+    timer_key = f"{idx}-{total}"
+    safe_timer_key = json.dumps(timer_key)
+    safe_target = json.dumps(target_label)
 
     components.html(
         f"""
-        <div style="display:flex; gap:10px; margin:4px 0 8px 0; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
-          <div style="flex:1; text-align:center; border:1px solid #d9d9d9; border-radius:12px; padding:10px 6px;">
-            <div style="font-size:12px; opacity:.7;">TEMPS RESTANT</div>
-            <div id="fitnessCountdown" style="font-size:25px; font-weight:750;">30 s</div>
+        <style>
+          html, body {{
+            margin: 0;
+            padding: 0;
+            background: transparent !important;
+            color: #ffffff !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          }}
+          .stats-row {{
+            display: flex;
+            gap: 10px;
+            margin: 4px 0 7px 0;
+          }}
+          .stat-card {{
+            flex: 1;
+            min-width: 0;
+            text-align: center;
+            background: #262730;
+            border: 1px solid #4a4b55;
+            border-radius: 12px;
+            padding: 10px 5px;
+            color: #ffffff !important;
+          }}
+          .stat-label {{
+            font-size: 11px;
+            font-weight: 650;
+            letter-spacing: .3px;
+            color: #d7d7dc !important;
+          }}
+          .stat-value {{
+            margin-top: 3px;
+            font-size: 25px;
+            line-height: 1.1;
+            font-weight: 800;
+            color: #ffffff !important;
+          }}
+          .movement-timer {{
+            text-align: center;
+            font-size: 14px;
+            font-weight: 650;
+            color: #e6e6ea !important;
+            padding-top: 2px;
+          }}
+        </style>
+
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">⏱ TEMPS SÉANCE</div>
+            <div id="fitnessSessionTime" class="stat-value">00:00</div>
           </div>
-          <div style="flex:1; text-align:center; border:1px solid #d9d9d9; border-radius:12px; padding:10px 6px;">
-            <div style="font-size:12px; opacity:.7;">CALORIES</div>
-            <div id="fitnessCalories" style="font-size:25px; font-weight:750;">{calories_before:.1f} kcal</div>
+          <div class="stat-card">
+            <div class="stat-label">🔥 CALORIES</div>
+            <div id="fitnessCalories" class="stat-value">{calories_before:.1f} kcal</div>
           </div>
         </div>
+        <div id="fitnessCountdown" class="movement-timer">Mouvement : 30 s restantes</div>
+
         <script>
         (() => {{
           const P = window.parent;
           const D = P.document;
-          const timerKey = {timer_key};
-          const targetLabel = {target};
+          const timerKey = {safe_timer_key};
+          const targetLabel = {safe_target};
+          const sessionTime = document.getElementById('fitnessSessionTime');
           const countdown = document.getElementById('fitnessCountdown');
           const calories = document.getElementById('fitnessCalories');
           const caloriesBefore = {calories_before:.8f};
@@ -361,40 +419,60 @@ def install_auto_advance(idx: int, total: int, calories_before: float, current_k
           if (P.__fitnessAutoTimer) clearTimeout(P.__fitnessAutoTimer);
           if (P.__fitnessCountdownTimer) clearInterval(P.__fitnessCountdownTimer);
 
-          P.__fitnessTimerKey = timerKey;
-          const startedAt = Date.now();
+          let exerciseStartedAt = parseInt(localStorage.getItem('fitnessExerciseStartedAt') || '0', 10);
+          const previousTimerKey = localStorage.getItem('fitnessExerciseTimerKey');
+          if (previousTimerKey !== timerKey || !exerciseStartedAt) {{
+            exerciseStartedAt = Date.now();
+            localStorage.setItem('fitnessExerciseTimerKey', timerKey);
+            localStorage.setItem('fitnessExerciseStartedAt', String(exerciseStartedAt));
+          }}
 
-          function elapsedSeconds() {{
-            return Math.min(30, Math.max(0, (Date.now() - startedAt) / 1000));
+          let sessionStartedAt = parseInt(localStorage.getItem('fitnessSessionStartedAt') || '0', 10);
+          if (!sessionStartedAt) {{
+            sessionStartedAt = Date.now() - ({idx} * 30000);
+            localStorage.setItem('fitnessSessionStartedAt', String(sessionStartedAt));
+          }}
+
+          function elapsedExerciseSeconds() {{
+            return Math.min(30, Math.max(0, (Date.now() - exerciseStartedAt) / 1000));
+          }}
+
+          function formatClock(totalSeconds) {{
+            const whole = Math.max(0, Math.floor(totalSeconds));
+            const mins = Math.floor(whole / 60).toString().padStart(2, '0');
+            const secs = (whole % 60).toString().padStart(2, '0');
+            return `${{mins}}:${{secs}}`;
           }}
 
           function render() {{
-            const elapsed = elapsedSeconds();
-            const left = Math.max(0, Math.ceil(30 - elapsed));
-            const kcal = caloriesBefore + currentExerciseCalories * (elapsed / 30);
-            if (countdown) countdown.textContent = `${{left}} s`;
+            const exerciseElapsed = elapsedExerciseSeconds();
+            const left = Math.max(0, Math.ceil(30 - exerciseElapsed));
+            const sessionElapsed = Math.max(0, (Date.now() - sessionStartedAt) / 1000);
+            const kcal = caloriesBefore + currentExerciseCalories * (exerciseElapsed / 30);
+
+            if (sessionTime) sessionTime.textContent = formatClock(sessionElapsed);
+            if (countdown) countdown.textContent = `Mouvement : ${{left}} s restantes`;
             if (calories) calories.textContent = `${{kcal.toFixed(1)}} kcal`;
           }}
 
           render();
           P.__fitnessCountdownTimer = setInterval(render, 200);
 
+          const remainingMs = Math.max(0, 30000 - (Date.now() - exerciseStartedAt));
           P.__fitnessAutoTimer = setTimeout(() => {{
             clearInterval(P.__fitnessCountdownTimer);
-            if (countdown) countdown.textContent = '0 s';
-            if (calories) calories.textContent = `${{(caloriesBefore + currentExerciseCalories).toFixed(1)}} kcal`;
+            render();
 
             const buttons = Array.from(D.querySelectorAll('button'));
             const targetButton = buttons.find(btn =>
               ((btn.innerText || btn.textContent || '').trim()).includes(targetLabel)
             );
-
             if (targetButton) targetButton.click();
-          }}, 30000);
+          }}, remainingMs);
         }})();
         </script>
         """,
-        height=86,
+        height=104,
     )
 
 
@@ -418,7 +496,13 @@ goal = st.selectbox(
 level = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Avancé"])
 duration = st.select_slider("Durée", options=[10, 15, 20, 30, 45], value=20, format_func=lambda x: f"{x} min")
 equipment = st.selectbox("Matériel", ["Aucun", "Haltères légers"])
-weight_kg = st.number_input("Poids (kg) — pour estimer les calories", min_value=30.0, max_value=200.0, value=70.0, step=1.0)
+weight_kg = st.number_input(
+    "Poids (kg) — pour estimer les calories",
+    min_value=30.0,
+    max_value=200.0,
+    value=70.0,
+    step=1.0,
+)
 
 preview_workout = build_session(goal, duration, level, equipment)
 install_start_audio(preview_workout[0])
@@ -486,8 +570,9 @@ if workout:
     current_met = met_for_exercise(workout[idx], session_level)
     current_kcal_30s = calories_for_seconds(session_weight, current_met, EXERCISE_SECONDS)
     install_auto_advance(idx, len(workout), calories_before, current_kcal_30s)
+
     st.caption("Calories = estimation selon le poids et l’intensité du mouvement.")
-    st.write("Le mouvement suivant démarre automatiquement à la fin du compte à rebours.")
+    st.write("Le mouvement suivant démarre automatiquement après 30 secondes.")
 
     col1, col2 = st.columns(2)
     with col1:
