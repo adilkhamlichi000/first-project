@@ -1,9 +1,10 @@
 import hmac
-import json
+import io
 
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
+from gtts import gTTS
 
 
 st.set_page_config(page_title="Fitness Coach", page_icon="💪", layout="centered")
@@ -60,12 +61,20 @@ def load_gif(filename: str):
         return None
 
 
-def sound_engine(name: str, instruction: str, seconds: int, exercise_key: str):
-    """Musique cachée + narration automatique. Le temps musical est conservé entre les reruns."""
+@st.cache_data(ttl=86400, show_spinner=False, max_entries=40)
+def make_voice_mp3(name: str, instruction: str, seconds: int):
+    """Crée une vraie piste MP3 française au lieu d'utiliser la voix Safari."""
     text = f"{name}. {instruction} Fais ce mouvement pendant {seconds} secondes."
-    safe_text = json.dumps(text, ensure_ascii=False)
-    safe_key = json.dumps(exercise_key, ensure_ascii=False)
+    try:
+        buffer = io.BytesIO()
+        gTTS(text=text, lang="fr", slow=False).write_to_fp(buffer)
+        return buffer.getvalue()
+    except Exception:
+        return None
 
+
+def background_music_engine():
+    """Musique cachée en fond, avec reprise de la position entre les reruns."""
     components.html(
         f"""
         <audio id="fitnessMusic" loop preload="auto" playsinline style="display:none;">
@@ -73,85 +82,24 @@ def sound_engine(name: str, instruction: str, seconds: int, exercise_key: str):
         </audio>
         <script>
           const music = document.getElementById('fitnessMusic');
-          const coachText = {safe_text};
-          const exerciseKey = {safe_key};
-          const normalVolume = 0.18;
-          const voiceVolume = 0.055;
+          music.volume = 0.08;
 
-          function restoreMusicPosition() {{
+          try {{
             const saved = parseFloat(localStorage.getItem('fitnessMusicTime') || '0');
-            if (Number.isFinite(saved) && saved > 0) {{
-              music.currentTime = saved;
-            }}
-          }}
+            if (Number.isFinite(saved) && saved > 0) music.currentTime = saved;
+          }} catch (e) {{}}
 
-          function saveMusicPosition() {{
+          function saveTime() {{
             try {{ localStorage.setItem('fitnessMusicTime', String(music.currentTime || 0)); }} catch (e) {{}}
           }}
 
-          async function startMusic() {{
-            music.volume = normalVolume;
-            try {{
-              await music.play();
-              localStorage.setItem('fitnessMusicStarted', '1');
-            }} catch (e) {{
-              // iOS peut bloquer un autoplay après un rerun. Dans ce cas,
-              // le prochain toucher n'importe où dans la page déclenche la musique,
-              // sans afficher de bouton dédié.
-              try {{
-                window.parent.document.addEventListener('pointerdown', () => music.play().catch(() => {{}}), {{once:true}});
-              }} catch (err) {{
-                document.addEventListener('pointerdown', () => music.play().catch(() => {{}}), {{once:true}});
-              }}
-            }}
-          }}
+          music.addEventListener('timeupdate', saveTime);
+          music.addEventListener('pause', saveTime);
+          window.addEventListener('beforeunload', saveTime);
 
-          function chooseFrenchVoice() {{
-            const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
-            return voices.find(v => (v.lang || '').toLowerCase().startsWith('fr')) || null;
-          }}
-
-          function speakCoach() {{
-            if (!('speechSynthesis' in window)) return;
-            const lastKey = localStorage.getItem('fitnessLastSpokenExercise');
-            if (lastKey === exerciseKey) return;
-
-            window.speechSynthesis.cancel();
-            const u = new SpeechSynthesisUtterance(coachText);
-            u.lang = 'fr-FR';
-            u.rate = 0.92;
-            u.pitch = 1.0;
-            u.volume = 1.0;
-            const french = chooseFrenchVoice();
-            if (french) u.voice = french;
-
-            u.onstart = () => {{ music.volume = voiceVolume; }};
-            u.onend = () => {{
-              music.volume = normalVolume;
-              localStorage.setItem('fitnessLastSpokenExercise', exerciseKey);
-            }};
-            u.onerror = () => {{ music.volume = normalVolume; }};
-
-            try {{
-              window.speechSynthesis.speak(u);
-            }} catch (e) {{}}
-          }}
-
-          restoreMusicPosition();
-          music.addEventListener('timeupdate', saveMusicPosition);
-          music.addEventListener('pause', saveMusicPosition);
-          window.addEventListener('beforeunload', saveMusicPosition);
-
-          startMusic();
-
-          if ('speechSynthesis' in window) {{
-            if (window.speechSynthesis.getVoices().length > 0) {{
-              setTimeout(speakCoach, 500);
-            }} else {{
-              window.speechSynthesis.onvoiceschanged = () => setTimeout(speakCoach, 250);
-              setTimeout(speakCoach, 1000);
-            }}
-          }}
+          music.play().catch(() => {{
+            document.addEventListener('pointerdown', () => music.play().catch(() => {{}}), {{once:true}});
+          }});
         </script>
         """,
         height=0,
@@ -204,8 +152,17 @@ def next_readable(workout, start_index: int):
     return None, None
 
 
+st.markdown(
+    """
+    <style>
+      div[data-testid="stAudio"] {display:none !important;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("💪 Fitness Coach")
-st.caption("Démonstrations animées + musique automatique + coach vocal automatique")
+st.caption("Démonstrations animées + musique automatique + vraies instructions audio en français")
 
 if not check_password():
     st.stop()
@@ -234,7 +191,6 @@ if st.button("Créer la séance", type="primary", use_container_width=True):
         st.session_state["workout"] = workout
         st.session_state["exercise_index"] = first_idx
         st.session_state["current_gif"] = first_gif
-        st.session_state["workout_id"] = st.session_state.get("workout_id", 0) + 1
         st.session_state["workout_meta"] = {
             "goal": goal,
             "duration": duration,
@@ -250,7 +206,6 @@ if workout:
     idx = min(st.session_state.get("exercise_index", 0), len(workout) - 1)
     name, gif_file, instruction, seconds = workout[idx]
     meta = st.session_state.get("workout_meta", {})
-    workout_id = st.session_state.get("workout_id", 1)
 
     gif_bytes = st.session_state.get("current_gif") or load_gif(gif_file)
     if not gif_bytes:
@@ -272,8 +227,16 @@ if workout:
     st.metric("Durée", f"{seconds} sec")
     st.info(instruction)
 
-    # Dès qu'une séance existe, musique et explications démarrent automatiquement.
-    sound_engine(name, instruction, seconds, f"{workout_id}-{idx}-{name}")
+    # Musique de fond automatique.
+    background_music_engine()
+
+    # Vraie piste MP3 française. Streamlit la joue dans la page principale,
+    # ce qui est nettement plus fiable sur iPhone que speechSynthesis dans un iframe.
+    voice_mp3 = make_voice_mp3(name, instruction, seconds)
+    if voice_mp3:
+        st.audio(voice_mp3, format="audio/mp3", autoplay=True)
+    else:
+        st.warning("La voix n'a pas pu être générée pour cet exercice.")
 
     st.subheader("🎥 Suis le coach")
     st.image(gif_bytes, width="stretch")
@@ -311,7 +274,6 @@ if workout:
         if first_idx is not None:
             st.session_state["exercise_index"] = first_idx
             st.session_state["current_gif"] = first_gif
-            st.session_state["workout_id"] = st.session_state.get("workout_id", 1) + 1
             st.rerun()
 
 st.caption("Musique : Rossini — Ouverture de Guillaume Tell, source Wikimedia Commons (CC BY-SA 4.0).")
