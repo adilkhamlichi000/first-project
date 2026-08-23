@@ -1,7 +1,13 @@
 import hmac
+import io
+import json
+import math
+import struct
+import wave
 
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 st.set_page_config(page_title="Fitness Coach", page_icon="💪", layout="centered")
@@ -59,6 +65,101 @@ def load_gif(filename: str):
         return None
 
 
+@st.cache_data(show_spinner=False)
+def make_background_music():
+    """Crée une boucle musicale douce localement, sans fichier ni service externe."""
+    sample_rate = 16000
+    duration = 12.0
+    total_samples = int(sample_rate * duration)
+
+    # Quatre accords très simples, trois secondes chacun.
+    chords = [
+        (261.63, 329.63, 392.00),  # C
+        (220.00, 261.63, 329.63),  # Am
+        (174.61, 220.00, 261.63),  # F
+        (196.00, 246.94, 293.66),  # G
+    ]
+
+    frames = bytearray()
+    for i in range(total_samples):
+        t = i / sample_rate
+        chord = chords[int(t // 3) % len(chords)]
+
+        # Pad musical doux.
+        pad = sum(math.sin(2 * math.pi * f * t) for f in chord) / 3
+        pad += 0.22 * math.sin(2 * math.pi * (chord[0] / 2) * t)
+
+        # Petit battement discret toutes les 0,75 seconde.
+        beat_phase = t % 0.75
+        kick = 0.0
+        if beat_phase < 0.16:
+            kick = math.sin(2 * math.pi * 62 * beat_phase) * math.exp(-22 * beat_phase)
+
+        # Fondu court au début de la boucle.
+        fade = min(1.0, t / 0.35)
+        value = (0.12 * pad + 0.09 * kick) * fade
+        value = max(-1.0, min(1.0, value))
+        frames.extend(struct.pack("<h", int(value * 32767)))
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(frames)
+    return buffer.getvalue()
+
+
+def voice_coach(name: str, instruction: str, seconds: int):
+    """Utilise la synthèse vocale du navigateur/iPhone, sans API externe."""
+    text = f"{name}. {instruction} Fais ce mouvement pendant {seconds} secondes."
+    safe_text = json.dumps(text, ensure_ascii=False)
+
+    components.html(
+        f"""
+        <div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
+          <button onclick="speakCoach()" style="
+            width:100%; border:0; border-radius:12px; padding:11px 14px;
+            font-size:16px; font-weight:600; cursor:pointer;
+            background:#262730; color:white;">
+            🔊 Réécouter l’explication
+          </button>
+        </div>
+        <script>
+          const coachText = {safe_text};
+          let alreadySpoken = false;
+
+          function speakCoach() {{
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(coachText);
+            u.lang = 'fr-FR';
+            u.rate = 0.92;
+            u.pitch = 1.0;
+            u.volume = 1.0;
+            const voices = window.speechSynthesis.getVoices();
+            const french = voices.find(v => (v.lang || '').toLowerCase().startsWith('fr'));
+            if (french) u.voice = french;
+            window.speechSynthesis.speak(u);
+            alreadySpoken = true;
+          }}
+
+          function autoSpeak() {{
+            if (!alreadySpoken) speakCoach();
+          }}
+
+          if (window.speechSynthesis.getVoices().length > 0) {{
+            setTimeout(autoSpeak, 550);
+          }} else {{
+            window.speechSynthesis.onvoiceschanged = () => setTimeout(autoSpeak, 300);
+            setTimeout(autoSpeak, 1200);
+          }}
+        </script>
+        """,
+        height=54,
+    )
+
+
 def adjusted_seconds(seconds: int, level: str) -> int:
     if level == "Débutant":
         return max(20, seconds - 5)
@@ -106,7 +207,7 @@ def next_readable(workout, start_index: int):
 
 
 st.title("💪 Fitness Coach")
-st.caption("Prototype stable : uniquement des mouvements avec démonstration animée disponible")
+st.caption("Démonstrations animées + musique de fond + coach vocal français")
 
 if not check_password():
     st.stop()
@@ -116,6 +217,11 @@ with st.expander("⚠️ Sécurité", expanded=False):
         "Fais les mouvements dans une amplitude confortable. Arrête-toi en cas de douleur, malaise, "
         "essoufflement inhabituel ou vertiges. Cette app ne remplace pas un avis médical ou un coach qualifié."
     )
+
+st.subheader("🔊 Son")
+voice_enabled = st.toggle("Coach vocal automatique", value=True)
+st.caption("Musique de fond douce — appuie sur ▶️ une fois pour la lancer. Sur iPhone, le démarrage automatique du son est souvent bloqué par le navigateur.")
+st.audio(make_background_music(), format="audio/wav", loop=True, autoplay=False)
 
 st.subheader("Créer ma séance")
 goal = st.selectbox(
@@ -171,6 +277,9 @@ if workout:
     st.metric("Durée", f"{seconds} sec")
     st.info(instruction)
 
+    if voice_enabled:
+        voice_coach(name, instruction, seconds)
+
     st.subheader("🎥 Suis le coach")
     st.image(gif_bytes, width="stretch")
     st.caption("Animation chargée directement depuis GitHub : pas de serveur vidéo externe.")
@@ -210,4 +319,4 @@ if workout:
             st.session_state["current_gif"] = first_gif
             st.rerun()
 
-st.caption("Version test — tous les mouvements affichés ont une démonstration animée hébergée sur GitHub.")
+st.caption("Version test — médias stables sur GitHub, musique générée localement et voix du navigateur.")
