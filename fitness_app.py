@@ -1,9 +1,5 @@
 import hmac
-import io
 import json
-import math
-import struct
-import wave
 
 import requests
 import streamlit as st
@@ -13,6 +9,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Fitness Coach", page_icon="💪", layout="centered")
 
 GIF_BASE = "https://raw.githubusercontent.com/mohamedatef90/exercise-library/main/gifs/"
+MUSIC_URL = "https://upload.wikimedia.org/wikipedia/commons/0/09/Guillaume_Tell_-_Overture_-_%28Rossini%2C_Gioacchino%29_by_Fritz_Reiner_%28conductor%29.mp3"
 
 
 def check_password() -> bool:
@@ -65,49 +62,26 @@ def load_gif(filename: str):
         return None
 
 
-@st.cache_data(show_spinner=False)
-def make_background_music():
-    """Crée une boucle musicale douce localement, sans fichier ni service externe."""
-    sample_rate = 16000
-    duration = 12.0
-    total_samples = int(sample_rate * duration)
-
-    # Quatre accords très simples, trois secondes chacun.
-    chords = [
-        (261.63, 329.63, 392.00),  # C
-        (220.00, 261.63, 329.63),  # Am
-        (174.61, 220.00, 261.63),  # F
-        (196.00, 246.94, 293.66),  # G
-    ]
-
-    frames = bytearray()
-    for i in range(total_samples):
-        t = i / sample_rate
-        chord = chords[int(t // 3) % len(chords)]
-
-        # Pad musical doux.
-        pad = sum(math.sin(2 * math.pi * f * t) for f in chord) / 3
-        pad += 0.22 * math.sin(2 * math.pi * (chord[0] / 2) * t)
-
-        # Petit battement discret toutes les 0,75 seconde.
-        beat_phase = t % 0.75
-        kick = 0.0
-        if beat_phase < 0.16:
-            kick = math.sin(2 * math.pi * 62 * beat_phase) * math.exp(-22 * beat_phase)
-
-        # Fondu court au début de la boucle.
-        fade = min(1.0, t / 0.35)
-        value = (0.12 * pad + 0.09 * kick) * fade
-        value = max(-1.0, min(1.0, value))
-        frames.extend(struct.pack("<h", int(value * 32767)))
-
-    buffer = io.BytesIO()
-    with wave.open(buffer, "wb") as wav_file:
-        wav_file.setnchannels(1)
-        wav_file.setsampwidth(2)
-        wav_file.setframerate(sample_rate)
-        wav_file.writeframes(frames)
-    return buffer.getvalue()
+def background_music_player():
+    """Lecteur de fond : morceau connu, librement réutilisable, volume bas."""
+    components.html(
+        f"""
+        <div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif; color:#ddd;">
+          <audio id="fitnessMusic" controls loop preload="metadata" style="width:100%; height:40px;">
+            <source src="{MUSIC_URL}" type="audio/mpeg">
+          </audio>
+          <div style="font-size:11px; color:#8d8d8d; margin-top:5px; line-height:1.25;">
+            Rossini — <i>Ouverture de Guillaume Tell</i>, interprétation Fritz Reiner / Chicago Symphony Orchestra.
+            Source : Wikimedia Commons, CC BY-SA 4.0.
+          </div>
+        </div>
+        <script>
+          const music = document.getElementById('fitnessMusic');
+          music.volume = 0.18;
+        </script>
+        """,
+        height=76,
+    )
 
 
 def voice_coach(name: str, instruction: str, seconds: int):
@@ -207,7 +181,7 @@ def next_readable(workout, start_index: int):
 
 
 st.title("💪 Fitness Coach")
-st.caption("Démonstrations animées + musique de fond + coach vocal français")
+st.caption("Démonstrations animées + musique + coach vocal français")
 
 if not check_password():
     st.stop()
@@ -218,10 +192,12 @@ with st.expander("⚠️ Sécurité", expanded=False):
         "essoufflement inhabituel ou vertiges. Cette app ne remplace pas un avis médical ou un coach qualifié."
     )
 
-st.subheader("🔊 Son")
+st.subheader("🎵 Musique")
+st.caption("Rossini — Ouverture de Guillaume Tell. Appuie sur ▶️ pour démarrer ; le volume est volontairement bas pour entendre le coach.")
+background_music_player()
+
+st.subheader("🔊 Coach")
 voice_enabled = st.toggle("Coach vocal automatique", value=True)
-st.caption("Musique de fond douce — appuie sur ▶️ une fois pour la lancer. Sur iPhone, le démarrage automatique du son est souvent bloqué par le navigateur.")
-st.audio(make_background_music(), format="audio/wav", loop=True, autoplay=False)
 
 st.subheader("Créer ma séance")
 goal = st.selectbox(
@@ -319,4 +295,4 @@ if workout:
             st.session_state["current_gif"] = first_gif
             st.rerun()
 
-st.caption("Version test — médias stables sur GitHub, musique générée localement et voix du navigateur.")
+st.caption("Version test — médias stables sur GitHub, Rossini en fond et voix française du navigateur.")
