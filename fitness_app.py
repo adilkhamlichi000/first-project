@@ -1,4 +1,5 @@
 import hmac
+from pathlib import Path
 
 import streamlit as st
 
@@ -20,28 +21,29 @@ def check_password() -> bool:
     return False
 
 
-# Chaque mouvement proposé dans l'app a maintenant une démonstration vidéo
-# intégrée. Les clips tournent en boucle directement dans Streamlit.
+# Bibliothèque cohérente : chaque mouvement pointe vers un clip local montrant
+# exactement le même coach virtuel. Aucun lien YouTube ou vidéo externe.
 EXERCISE_VIDEOS = {
-    "Cercles de bras": "https://www.youtube.com/watch?v=2yqZn9K5f4I",
-    "Montées de genoux douces": "https://www.youtube.com/watch?v=OAJ_J3EZkdY",
-    "Step touch": "https://www.youtube.com/watch?v=wH9hsR7Ck_M",
-    "Squats": "https://www.youtube.com/watch?v=aclHkVaku9U",
-    "Pompes inclinées": "https://www.youtube.com/watch?v=Gvm5Q29UHbk",
-    "Pont fessier": "https://www.youtube.com/watch?v=wPM8icPu6H8",
-    "Planche": "https://www.youtube.com/watch?v=DjEN3SKl0Eg",
-    "Bird-dog": "https://www.youtube.com/watch?v=ZdAHe9_HeEw",
-    "Jumping jacks doux": "https://www.youtube.com/watch?v=c4DAnQ6DtF8",
-    "Mountain climbers lents": "https://www.youtube.com/watch?v=nmwgirgXLYM",
-    "Shadow boxing": "https://www.youtube.com/watch?v=Q1Piq_vMh5g",
-    "Cat-cow": "https://www.youtube.com/watch?v=MSBOBAIeLqI",
-    "Rotation thoracique": "https://www.youtube.com/watch?v=snzLuyYgbVI",
-    "Étirement des hanches": "https://www.youtube.com/watch?v=Uc6d-qOxI0c",
-    "Étirement des ischios": "https://www.youtube.com/watch?v=vA6qj6suhN4",
-    "Développé épaules avec haltères": "https://www.youtube.com/watch?v=qEwKCR5JCog",
-    "Rowing avec haltères": "https://www.youtube.com/watch?v=roCP6wCXPqo",
-    "Respiration lente": "https://www.youtube.com/watch?v=Yjvwkde95w0",
-    "Étirement doux": "https://www.youtube.com/watch?v=4bxSqGW89YM",
+    "Step touch": "videos/step_touch.mp4",
+    "Cercles de bras": "videos/arm_circles.mp4",
+    "Montées de genoux douces": "videos/gentle_high_knees.mp4",
+    "Squats": "videos/squats.mp4",
+    "Pompes inclinées": "videos/incline_pushups.mp4",
+    "Fentes arrière": "videos/reverse_lunges.mp4",
+    "Pont fessier": "videos/glute_bridge.mp4",
+    "Planche": "videos/plank.mp4",
+    "Bird-dog": "videos/bird_dog.mp4",
+    "Jumping jacks doux": "videos/gentle_jumping_jacks.mp4",
+    "Mountain climbers lents": "videos/slow_mountain_climbers.mp4",
+    "Shadow boxing": "videos/shadow_boxing.mp4",
+    "Cat-cow": "videos/cat_cow.mp4",
+    "Rotation thoracique": "videos/thoracic_rotation.mp4",
+    "Étirement des hanches": "videos/hip_flexor_stretch.mp4",
+    "Étirement des ischios": "videos/hamstring_stretch.mp4",
+    "Développé épaules avec haltères": "videos/dumbbell_shoulder_press.mp4",
+    "Rowing avec haltères": "videos/dumbbell_row.mp4",
+    "Respiration lente": "videos/slow_breathing.mp4",
+    "Étirement doux": "videos/gentle_full_body_stretch.mp4",
 }
 
 
@@ -55,6 +57,7 @@ EXERCISES = {
     "Renforcement": [
         ("Squats", "Pieds largeur d’épaules, hanches vers l’arrière, poitrine haute.", 40),
         ("Pompes inclinées", "Mains sur une table ou un canapé, corps gainé.", 35),
+        ("Fentes arrière", "Recule une jambe, descends doucement et alterne les côtés.", 40),
         ("Pont fessier", "Allongé sur le dos, pousse les hanches vers le haut.", 40),
         ("Planche", "Corps aligné, abdos serrés, respire normalement.", 30),
         ("Bird-dog", "À quatre pattes, tends bras et jambe opposés en alternance.", 40),
@@ -84,14 +87,24 @@ def adjusted_seconds(base_seconds: int, level: str) -> int:
 
 def show_exercise_video(name: str, seconds: int):
     st.subheader("🎥 Suis le coach")
-    st.caption(f"La démonstration reste dans l’app et tourne en boucle pendant tes {seconds} secondes.")
-    st.video(
-        EXERCISE_VIDEOS[name],
-        loop=True,
-        autoplay=True,
-        muted=True,
-        width="stretch",
-    )
+    video_path = Path(EXERCISE_VIDEOS[name])
+
+    if video_path.exists():
+        st.caption(
+            f"Même coach virtuel pour tous les mouvements. Le clip tourne en boucle pendant tes {seconds} secondes."
+        )
+        st.video(
+            str(video_path),
+            loop=True,
+            autoplay=True,
+            muted=True,
+            width="stretch",
+        )
+    else:
+        st.info(
+            "Le clip cohérent de ce mouvement n’est pas encore installé. "
+            f"Fichier attendu : `{video_path}`"
+        )
 
 
 def build_session(goal: str, duration: int, level: str, equipment: str):
@@ -134,7 +147,7 @@ def build_session(goal: str, duration: int, level: str, equipment: str):
 
 
 st.title("💪 Fitness Coach")
-st.caption("Un coach vidéo directement dans ton téléphone")
+st.caption("Un coach vidéo cohérent directement dans ton téléphone")
 
 if not check_password():
     st.stop()
@@ -205,4 +218,4 @@ if workout:
         st.session_state["exercise_index"] = 0
         st.rerun()
 
-st.caption("Version 3 — vidéos intégrées et bouclées dans l’app, sans coût OpenAI.")
+st.caption("Version 4 — bibliothèque vidéo locale préparée pour un coach virtuel unique.")
