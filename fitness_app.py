@@ -1,5 +1,6 @@
 import hmac
 import json
+import random
 import time
 
 import requests
@@ -27,32 +28,66 @@ def check_password() -> bool:
     return False
 
 
+# Nom affiché, GIF, consigne courte, MET approximatif.
+# Tous les GIFs ci-dessous existent dans la bibliothèque exercise-library.
 EXERCISES = {
     "Échauffement": [
         ("Cercles de chevilles", "uL9CsKm.gif", "Fais des rotations lentes dans les deux sens.", 2.5),
-        ("Étirement quadriceps à quatre pattes", "qBcKorM.gif", "Bouge lentement et reste dans une amplitude confortable.", 2.3),
+        ("Étirement quadriceps à quatre pattes", "qBcKorM.gif", "Bouge lentement et garde une amplitude confortable.", 2.3),
+        ("Étirement des mollets assis", "17bqEXD.gif", "Tends une jambe et avance doucement le buste sans forcer.", 2.2),
+        ("Étirement des fessiers assis", "DeDThfG.gif", "Croise la jambe et garde le dos long pendant l'étirement.", 2.3),
+        ("Étirement quadriceps sur le côté", "BWnJR72.gif", "Attrape la cheville et rapproche doucement le talon de la fesse.", 2.3),
+        ("Toucher d'orteils debout", "BbfB8Gb.gif", "Penche-toi depuis les hanches en gardant le mouvement contrôlé.", 2.8),
+        ("Toucher d'orteils circulaire", "RtyAsy1.gif", "Alterne les côtés lentement en gardant le tronc contrôlé.", 3.0),
     ],
     "Renforcement": [
         ("Pompes profondes", "vptOQ4N.gif", "Corps gainé, descends sous contrôle puis pousse sans creuser le dos.", 8.0),
+        ("Pompes classiques", "I4hDWkc.gif", "Garde le corps aligné et descends la poitrine sous contrôle.", 8.0),
+        ("Pompes archer", "A9qxk2F.gif", "Décale le poids vers un bras puis alterne en gardant le bassin stable.", 9.0),
+        ("Pompes avec planche latérale", "KhHJ338.gif", "Après chaque pompe, tourne le buste et ouvre un bras vers le plafond.", 8.5),
         ("Pont fessier", "u0cNiij.gif", "Pousse dans les talons et serre les fessiers en haut.", 4.0),
+        ("Extension lombaire au sol", "ANbbry2.gif", "Soulève légèrement le buste en serrant les fessiers, sans forcer la nuque.", 3.5),
         ("Abdos 3/4 sit-up", "2gPfomN.gif", "Monte le buste sous contrôle sans tirer sur la nuque.", 5.0),
         ("Toucher de talons alterné", "qaZVsGk.gif", "Garde les abdos engagés et alterne droite et gauche.", 4.0),
+        ("Dead bug", "iny3m5y.gif", "Plaque le bas du dos au sol et allonge bras et jambe opposés.", 3.5),
+        ("Reverse crunch", "nCU1Ekp.gif", "Ramène les genoux vers la poitrine en enroulant doucement le bassin.", 5.0),
+        ("Crunch bras au-dessus de la tête", "kjJ3VoQ.gif", "Monte les épaules avec les abdos sans tirer sur la nuque.", 5.0),
+        ("Sit-up bras croisés", "6ZCiYWQ.gif", "Garde les bras croisés et monte le buste de façon régulière.", 5.5),
+        ("Squat avec extension des bras", "QChZi3x.gif", "Descends les hanches puis tends les bras au-dessus de la tête en remontant.", 5.5),
+        ("Squat avec rotation", "5BZHW9s.gif", "Remonte du squat puis tourne le buste en alternant les côtés.", 6.0),
+        ("Fente avec rotation", "K9VL0Jq.gif", "Avance en fente puis tourne le buste vers la jambe avant.", 6.0),
+        ("Fentes marchées", "IZVHb27.gif", "Avance en alternant les jambes, buste droit et genou avant contrôlé.", 6.0),
+        ("Relevé de jambes assis", "Hgs6Nl1.gif", "Garde le tronc stable et monte les jambes avec les abdos.", 4.5),
+        ("Crab twist avec toucher de pied", "xgsGFVM.gif", "Tourne le buste et touche le pied opposé en gardant le bassin actif.", 6.0),
     ],
     "Cardio": [
         ("Mountain climbers", "RJgzwny.gif", "Garde le bassin stable et alterne les genoux à un rythme régulier.", 8.5),
         ("Burpees", "dK9394r.gif", "Reste contrôlé ; enlève le saut si nécessaire.", 10.0),
-        ("Fentes marchées genoux hauts", "J9zIWig.gif", "Reste droit et avance avec contrôle.", 6.0),
+        ("Fentes marchées genoux hauts", "J9zIWig.gif", "Reste droit et monte le genou avec contrôle à chaque pas.", 6.5),
+        ("Sauts ciseaux", "Eh2v5Iu.gif", "Saute en alternant rapidement la jambe placée devant.", 8.0),
+        ("Skater hops", "zfNHMN9.gif", "Saute latéralement d'un pied sur l'autre et amortis chaque réception.", 8.0),
+        ("Pas de ski latéraux", "5MRH8H2.gif", "Enchaîne les sauts latéraux avec un rythme régulier et léger.", 7.5),
+        ("Fentes sautées", "PM1PZjg.gif", "Change de jambe en l'air et réceptionne doucement avant de repartir.", 9.0),
     ],
     "Haltères": [
         ("Élévations latérales haltères", "DsgkuIt.gif", "Épaules basses, monte les bras sans élan.", 3.5),
+        ("Rowing penché haltères", "BJ0Hz5L.gif", "Dos neutre, tire les haltères vers les côtes en serrant les omoplates.", 6.0),
+        ("Développé épaule un bras", "84RyJf8.gif", "Gaine le tronc et pousse l'haltère au-dessus de la tête sans te pencher.", 6.0),
+        ("Élévations frontales haltères", "3eGE2JC.gif", "Monte les haltères devant toi jusqu'à hauteur d'épaule sans élan.", 4.5),
+        ("Squat avec haltères", "HsvHqgf.gif", "Garde les haltères le long du corps, poitrine haute et pousse dans les talons.", 6.0),
+        ("Fentes avec haltères", "RRWFUcw.gif", "Tiens les haltères le long du corps et alterne les fentes avec contrôle.", 6.0),
+        ("Fente avec curl biceps", "Mz6lLcW.gif", "Fais le curl pendant la descente en fente puis alterne les jambes.", 6.5),
+        ("Soulevé de terre haltères", "nUwVh7b.gif", "Recule les hanches, garde le dos neutre puis redresse-toi en serrant les fessiers.", 6.0),
+        ("Curl marteau puis développé", "LeaZOIz.gif", "Fais un curl contrôlé puis pousse l'haltère au-dessus de la tête.", 5.5),
+        ("Squat avec curl biceps", "niXESDw.gif", "Descends en squat puis réalise le curl sans balancer les bras.", 6.0),
     ],
 }
 
 
-@st.cache_data(ttl=86400, show_spinner=False, max_entries=20)
+@st.cache_data(ttl=86400, show_spinner=False, max_entries=100)
 def load_gif(filename: str):
     try:
-        response = requests.get(GIF_BASE + filename, timeout=30)
+        response = requests.get(GIF_BASE + filename, timeout=20)
         response.raise_for_status()
         if len(response.content) < 1024:
             return None
@@ -75,42 +110,43 @@ def choose_active_pool(goal: str, equipment: str):
     if goal == "Se muscler":
         pool = list(EXERCISES["Renforcement"])
     elif goal == "Cardio / brûler des calories":
-        pool = list(EXERCISES["Cardio"]) + list(EXERCISES["Renforcement"][:2])
+        pool = list(EXERCISES["Cardio"]) + list(EXERCISES["Renforcement"][:10])
     elif goal == "Mobilité / récupération":
-        pool = list(EXERCISES["Échauffement"]) + list(EXERCISES["Renforcement"][1:2])
+        pool = list(EXERCISES["Échauffement"]) + [
+            EXERCISES["Renforcement"][4],
+            EXERCISES["Renforcement"][5],
+            EXERCISES["Renforcement"][8],
+        ]
     else:
-        pool = list(EXERCISES["Renforcement"][:3]) + list(EXERCISES["Cardio"][:2])
+        pool = list(EXERCISES["Renforcement"]) + list(EXERCISES["Cardio"])
 
     if equipment == "Haltères légers":
         pool += EXERCISES["Haltères"]
     return unique_exercises(pool)
 
 
-def playable(exercise):
-    return load_gif(exercise[1]) is not None
-
-
 def build_session(goal: str, duration: int, level: str, equipment: str):
     target_count = max(1, int(duration * 60 / EXERCISE_SECONDS))
-
-    warmups = [ex for ex in EXERCISES["Échauffement"] if playable(ex)]
-    active = [ex for ex in choose_active_pool(goal, equipment) if playable(ex)]
+    warmups = list(EXERCISES["Échauffement"])
+    active = choose_active_pool(goal, equipment)
 
     if not active:
         active = warmups
-    if not active:
-        return []
 
     session = []
-    for ex in warmups[:2]:
-        if len(session) < target_count:
-            session.append((*ex[:3], EXERCISE_SECONDS, ex[3]))
-
-    i = 0
-    while len(session) < target_count:
-        ex = active[i % len(active)]
+    warmup_count = min(4, target_count)
+    for ex in warmups[:warmup_count]:
         session.append((*ex[:3], EXERCISE_SECONDS, ex[3]))
-        i += 1
+
+    while len(session) < target_count:
+        block = list(active)
+        random.shuffle(block)
+        for ex in block:
+            if len(session) >= target_count:
+                break
+            if session and session[-1][1] == ex[1]:
+                continue
+            session.append((*ex[:3], EXERCISE_SECONDS, ex[3]))
 
     return session
 
@@ -397,7 +433,7 @@ def live_workout_timer(workout, weight_kg: float, level: str):
 
 
 st.title("💪 Fitness Coach")
-st.caption("30 secondes par mouvement • durée totale respectée • Hype Energy • coach vocal")
+st.caption("42 mouvements • 30 secondes par mouvement • durée totale respectée • Hype Energy")
 
 if not check_password():
     st.stop()
@@ -424,9 +460,7 @@ weight_kg = st.number_input(
     step=1.0,
 )
 
-with st.spinner("Vérification des démonstrations disponibles…"):
-    preview_workout = build_session(goal, duration, level, equipment)
-
+preview_workout = build_session(goal, duration, level, equipment)
 if preview_workout:
     install_start_audio(preview_workout[0])
 
@@ -448,9 +482,6 @@ if st.button("Créer la séance", type="primary", use_container_width=True, disa
         "weight_kg": float(weight_kg),
     }
     st.rerun()
-
-if not preview_workout:
-    st.error("Aucune démonstration n'est accessible pour le moment.")
 
 workout = st.session_state.get("workout")
 
@@ -489,6 +520,7 @@ if workout:
             st.session_state["exercise_index"] = idx + 1
             st.session_state["exercise_started_at"] = time.time()
             st.session_state["current_gif"] = None
+            st.session_state["auto_announce"] = True
             st.rerun()
         st.error("Les démonstrations sont temporairement indisponibles.")
         st.stop()
