@@ -49,6 +49,20 @@ EXERCISES = {
     ],
 }
 
+# Valeurs MET approximatives pour estimer les calories brûlées.
+EXERCISE_MET = {
+    "Cercles de chevilles": 2.5,
+    "Étirement quadriceps à quatre pattes": 2.3,
+    "Pompes profondes": 8.0,
+    "Pont fessier": 4.0,
+    "Abdos 3/4 sit-up": 5.0,
+    "Toucher de talons alterné": 4.0,
+    "Mountain climbers": 8.5,
+    "Burpees": 10.0,
+    "Fentes marchées genoux hauts": 6.0,
+    "Élévations latérales haltères": 3.5,
+}
+
 
 @st.cache_data(ttl=86400, show_spinner=False, max_entries=20)
 def load_gif(filename: str):
@@ -86,7 +100,6 @@ def build_session(goal: str, duration: int, level: str, equipment: str):
     for _ in range(rounds):
         session.extend(pool)
 
-    # Tous les mouvements durent exactement 30 secondes.
     return [
         (name, gif_file, instruction, EXERCISE_SECONDS)
         for name, gif_file, instruction, _ in session
@@ -104,6 +117,32 @@ def next_readable(workout, start_index: int):
 def coach_text(exercise):
     name, _, instruction, seconds = exercise
     return f"{name}. {instruction} Fais ce mouvement pendant {seconds} secondes."
+
+
+def met_for_exercise(exercise, level: str) -> float:
+    name = exercise[0]
+    met = EXERCISE_MET.get(name, 4.0)
+    if level == "Débutant":
+        met *= 0.9
+    elif level == "Avancé":
+        met *= 1.1
+    return met
+
+
+def calories_for_seconds(weight_kg: float, met: float, seconds: float) -> float:
+    # Formule standard d'estimation : kcal/min = MET × 3,5 × poids(kg) / 200.
+    return met * 3.5 * weight_kg / 200.0 * (seconds / 60.0)
+
+
+def calories_before_index(workout, idx: int, weight_kg: float, level: str) -> float:
+    total = 0.0
+    for exercise in workout[:idx]:
+        total += calories_for_seconds(
+            weight_kg,
+            met_for_exercise(exercise, level),
+            EXERCISE_SECONDS,
+        )
+    return total
 
 
 def install_start_audio(first_exercise):
@@ -290,18 +329,23 @@ def install_navigation_audio(workout, idx):
     )
 
 
-def install_auto_advance(idx: int, total: int):
-    """Compte 30 secondes puis déclenche automatiquement Suivant/Terminer."""
+def install_auto_advance(idx: int, total: int, calories_before: float, current_kcal_30s: float):
+    """Compte 30 secondes, affiche les kcal en direct puis passe automatiquement au mouvement suivant."""
     target_label = "Suivant" if idx < total - 1 else "Terminer"
     timer_key = json.dumps(f"{idx}-{total}")
     target = json.dumps(target_label)
 
     components.html(
         f"""
-        <div id="fitnessCountdown" style="
-          text-align:center; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
-          font-size:20px; font-weight:700; padding:5px 0 2px 0;">
-          ⏱️ 30 s
+        <div style="display:flex; gap:10px; margin:4px 0 8px 0; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
+          <div style="flex:1; text-align:center; border:1px solid #d9d9d9; border-radius:12px; padding:10px 6px;">
+            <div style="font-size:12px; opacity:.7;">TEMPS RESTANT</div>
+            <div id="fitnessCountdown" style="font-size:25px; font-weight:750;">30 s</div>
+          </div>
+          <div style="flex:1; text-align:center; border:1px solid #d9d9d9; border-radius:12px; padding:10px 6px;">
+            <div style="font-size:12px; opacity:.7;">CALORIES</div>
+            <div id="fitnessCalories" style="font-size:25px; font-weight:750;">{calories_before:.1f} kcal</div>
+          </div>
         </div>
         <script>
         (() => {{
@@ -310,6 +354,9 @@ def install_auto_advance(idx: int, total: int):
           const timerKey = {timer_key};
           const targetLabel = {target};
           const countdown = document.getElementById('fitnessCountdown');
+          const calories = document.getElementById('fitnessCalories');
+          const caloriesBefore = {calories_before:.8f};
+          const currentExerciseCalories = {current_kcal_30s:.8f};
 
           if (P.__fitnessAutoTimer) clearTimeout(P.__fitnessAutoTimer);
           if (P.__fitnessCountdownTimer) clearInterval(P.__fitnessCountdownTimer);
@@ -317,21 +364,25 @@ def install_auto_advance(idx: int, total: int):
           P.__fitnessTimerKey = timerKey;
           const startedAt = Date.now();
 
-          function remaining() {{
-            return Math.max(0, 30 - Math.floor((Date.now() - startedAt) / 1000));
+          function elapsedSeconds() {{
+            return Math.min(30, Math.max(0, (Date.now() - startedAt) / 1000));
           }}
 
-          function renderCountdown() {{
-            const left = remaining();
-            if (countdown) countdown.textContent = `⏱️ ${{left}} s`;
+          function render() {{
+            const elapsed = elapsedSeconds();
+            const left = Math.max(0, Math.ceil(30 - elapsed));
+            const kcal = caloriesBefore + currentExerciseCalories * (elapsed / 30);
+            if (countdown) countdown.textContent = `${{left}} s`;
+            if (calories) calories.textContent = `${{kcal.toFixed(1)}} kcal`;
           }}
 
-          renderCountdown();
-          P.__fitnessCountdownTimer = setInterval(renderCountdown, 250);
+          render();
+          P.__fitnessCountdownTimer = setInterval(render, 200);
 
           P.__fitnessAutoTimer = setTimeout(() => {{
             clearInterval(P.__fitnessCountdownTimer);
-            if (countdown) countdown.textContent = '⏱️ 0 s';
+            if (countdown) countdown.textContent = '0 s';
+            if (calories) calories.textContent = `${{(caloriesBefore + currentExerciseCalories).toFixed(1)}} kcal`;
 
             const buttons = Array.from(D.querySelectorAll('button'));
             const targetButton = buttons.find(btn =>
@@ -343,7 +394,7 @@ def install_auto_advance(idx: int, total: int):
         }})();
         </script>
         """,
-        height=48,
+        height=86,
     )
 
 
@@ -367,6 +418,7 @@ goal = st.selectbox(
 level = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Avancé"])
 duration = st.select_slider("Durée", options=[10, 15, 20, 30, 45], value=20, format_func=lambda x: f"{x} min")
 equipment = st.selectbox("Matériel", ["Aucun", "Haltères légers"])
+weight_kg = st.number_input("Poids (kg) — pour estimer les calories", min_value=30.0, max_value=200.0, value=70.0, step=1.0)
 
 preview_workout = build_session(goal, duration, level, equipment)
 install_start_audio(preview_workout[0])
@@ -386,6 +438,7 @@ if st.button("Créer la séance", type="primary", use_container_width=True):
             "duration": duration,
             "level": level,
             "equipment": equipment,
+            "weight_kg": float(weight_kg),
         }
     else:
         st.error("Les démonstrations ne sont pas accessibles pour le moment.")
@@ -396,6 +449,8 @@ if workout:
     idx = min(st.session_state.get("exercise_index", 0), len(workout) - 1)
     name, gif_file, instruction, seconds = workout[idx]
     meta = st.session_state.get("workout_meta", {})
+    session_weight = float(meta.get("weight_kg", weight_kg))
+    session_level = meta.get("level", level)
 
     gif_bytes = st.session_state.get("current_gif") or load_gif(gif_file)
     if not gif_bytes:
@@ -422,13 +477,16 @@ if workout:
     st.progress((idx + 1) / len(workout))
     st.write(f"Exercice {idx + 1} sur {len(workout)}")
     st.header(name)
-    st.metric("Durée", f"{seconds} sec")
     st.info(instruction)
 
     st.subheader("🎥 Suis le coach")
     st.image(gif_bytes, width="stretch")
 
-    install_auto_advance(idx, len(workout))
+    calories_before = calories_before_index(workout, idx, session_weight, session_level)
+    current_met = met_for_exercise(workout[idx], session_level)
+    current_kcal_30s = calories_for_seconds(session_weight, current_met, EXERCISE_SECONDS)
+    install_auto_advance(idx, len(workout), calories_before, current_kcal_30s)
+    st.caption("Calories = estimation selon le poids et l’intensité du mouvement.")
     st.write("Le mouvement suivant démarre automatiquement à la fin du compte à rebours.")
 
     col1, col2 = st.columns(2)
