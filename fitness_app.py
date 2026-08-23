@@ -11,6 +11,7 @@ st.set_page_config(page_title="Fitness Coach", page_icon="💪", layout="centere
 GIF_BASE = "https://raw.githubusercontent.com/mohamedatef90/exercise-library/main/gifs/"
 # Hype Energy — The_Mountain, Pixabay Content License.
 MUSIC_URL = "https://pixabay.com/music/download/id-171614.mp3"
+EXERCISE_SECONDS = 30
 
 
 def check_password() -> bool:
@@ -61,14 +62,6 @@ def load_gif(filename: str):
         return None
 
 
-def adjusted_seconds(seconds: int, level: str) -> int:
-    if level == "Débutant":
-        return max(20, seconds - 5)
-    if level == "Avancé":
-        return seconds + 10
-    return seconds
-
-
 def build_session(goal: str, duration: int, level: str, equipment: str):
     session = list(EXERCISES["Échauffement"])
 
@@ -93,9 +86,10 @@ def build_session(goal: str, duration: int, level: str, equipment: str):
     for _ in range(rounds):
         session.extend(pool)
 
+    # Tous les mouvements durent exactement 30 secondes.
     return [
-        (name, gif_file, instruction, adjusted_seconds(seconds, level))
-        for name, gif_file, instruction, seconds in session
+        (name, gif_file, instruction, EXERCISE_SECONDS)
+        for name, gif_file, instruction, _ in session
     ]
 
 
@@ -296,6 +290,63 @@ def install_navigation_audio(workout, idx):
     )
 
 
+def install_auto_advance(idx: int, total: int):
+    """Compte 30 secondes puis déclenche automatiquement Suivant/Terminer."""
+    target_label = "Suivant" if idx < total - 1 else "Terminer"
+    timer_key = json.dumps(f"{idx}-{total}")
+    target = json.dumps(target_label)
+
+    components.html(
+        f"""
+        <div id="fitnessCountdown" style="
+          text-align:center; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
+          font-size:20px; font-weight:700; padding:5px 0 2px 0;">
+          ⏱️ 30 s
+        </div>
+        <script>
+        (() => {{
+          const P = window.parent;
+          const D = P.document;
+          const timerKey = {timer_key};
+          const targetLabel = {target};
+          const countdown = document.getElementById('fitnessCountdown');
+
+          if (P.__fitnessAutoTimer) clearTimeout(P.__fitnessAutoTimer);
+          if (P.__fitnessCountdownTimer) clearInterval(P.__fitnessCountdownTimer);
+
+          P.__fitnessTimerKey = timerKey;
+          const startedAt = Date.now();
+
+          function remaining() {{
+            return Math.max(0, 30 - Math.floor((Date.now() - startedAt) / 1000));
+          }}
+
+          function renderCountdown() {{
+            const left = remaining();
+            if (countdown) countdown.textContent = `⏱️ ${{left}} s`;
+          }}
+
+          renderCountdown();
+          P.__fitnessCountdownTimer = setInterval(renderCountdown, 250);
+
+          P.__fitnessAutoTimer = setTimeout(() => {{
+            clearInterval(P.__fitnessCountdownTimer);
+            if (countdown) countdown.textContent = '⏱️ 0 s';
+
+            const buttons = Array.from(D.querySelectorAll('button'));
+            const targetButton = buttons.find(btn =>
+              ((btn.innerText || btn.textContent || '').trim()).includes(targetLabel)
+            );
+
+            if (targetButton) targetButton.click();
+          }}, 30000);
+        }})();
+        </script>
+        """,
+        height=48,
+    )
+
+
 st.title("💪 Fitness Coach")
 st.caption("Démonstrations animées + Hype Energy + coach vocal français")
 
@@ -377,7 +428,8 @@ if workout:
     st.subheader("🎥 Suis le coach")
     st.image(gif_bytes, width="stretch")
 
-    st.write(f"⏱️ Fais le mouvement pendant **{seconds} secondes**, puis passe au suivant.")
+    install_auto_advance(idx, len(workout))
+    st.write("Le mouvement suivant démarre automatiquement à la fin du compte à rebours.")
 
     col1, col2 = st.columns(2)
     with col1:
