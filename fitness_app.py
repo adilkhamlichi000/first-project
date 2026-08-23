@@ -23,8 +23,8 @@ def check_password() -> bool:
     return False
 
 
-# Exercices du prototype HD. Le nom anglais sert à retrouver la vidéo dans
-# le fichier statique GitHub, sans dépendre de l'ancienne API hébergée.
+# Exercices candidats. Au moment de créer la séance, l'app garde uniquement
+# ceux pour lesquels une vraie vidéo HD féminine est présente dans le catalogue.
 EXERCISES = {
     "Échauffement": [
         ("Échauffement épaules", "Band Shoulder Warm-Up Stretch", "Mobilise les épaules sans forcer.", 35),
@@ -91,7 +91,17 @@ def female_video(item):
     if not item:
         return None
     videos = item.get("videos", {}) or {}
-    return videos.get("female") or videos.get("male")
+    return videos.get("female")
+
+
+def available_exercises(catalogue, exercises):
+    available = []
+    for exercise in exercises:
+        _, api_name, _, _ = exercise
+        item = find_exercise(catalogue, api_name)
+        if female_video(item):
+            available.append(exercise)
+    return available
 
 
 def adjusted_seconds(seconds: int, level: str) -> int:
@@ -102,8 +112,8 @@ def adjusted_seconds(seconds: int, level: str) -> int:
     return seconds
 
 
-def build_session(goal: str, duration: int, level: str, equipment: str):
-    session = list(EXERCISES["Échauffement"])
+def build_session(goal: str, duration: int, level: str, equipment: str, catalogue):
+    warmup = available_exercises(catalogue, EXERCISES["Échauffement"])
 
     if goal == "Se muscler":
         pool = EXERCISES["Renforcement"]
@@ -116,6 +126,11 @@ def build_session(goal: str, duration: int, level: str, equipment: str):
 
     if equipment == "Haltères légers":
         pool = pool + EXERCISES["Haltères"]
+
+    # Règle stricte : aucun mouvement sans vidéo féminine disponible.
+    pool = available_exercises(catalogue, pool)
+
+    session = list(warmup)
 
     rounds = 1 if duration <= 15 else 2 if duration <= 30 else 3
     if level == "Débutant":
@@ -133,7 +148,7 @@ def build_session(goal: str, duration: int, level: str, equipment: str):
 
 
 st.title("💪 Fitness Coach HD")
-st.caption("Vraies démonstrations vidéo Full‑HD directement dans l’app")
+st.caption("Uniquement des mouvements avec vraie démonstration vidéo HD")
 
 if not check_password():
     st.stop()
@@ -152,7 +167,9 @@ except Exception as exc:
     st.error(f"Le catalogue HD n’a pas pu être chargé : {exc}")
 
 if catalogue:
-    st.success(f"Catalogue HD chargé : {len(catalogue)} exercices")
+    candidate_exercises = [exercise for group in EXERCISES.values() for exercise in group]
+    available_count = len(available_exercises(catalogue, candidate_exercises))
+    st.success(f"Vidéos HD prêtes : {available_count} mouvements sélectionnés")
 
 st.subheader("Créer ma séance")
 goal = st.selectbox(
@@ -163,15 +180,19 @@ level = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Avancé"])
 duration = st.select_slider("Durée", options=[10, 15, 20, 30, 45], value=20, format_func=lambda x: f"{x} min")
 equipment = st.selectbox("Matériel", ["Aucun", "Haltères légers"])
 
-if st.button("Créer la séance", type="primary", use_container_width=True):
-    st.session_state["workout"] = build_session(goal, duration, level, equipment)
-    st.session_state["exercise_index"] = 0
-    st.session_state["workout_meta"] = {
-        "goal": goal,
-        "duration": duration,
-        "level": level,
-        "equipment": equipment,
-    }
+if st.button("Créer la séance", type="primary", use_container_width=True, disabled=not bool(catalogue)):
+    workout = build_session(goal, duration, level, equipment, catalogue)
+    if workout:
+        st.session_state["workout"] = workout
+        st.session_state["exercise_index"] = 0
+        st.session_state["workout_meta"] = {
+            "goal": goal,
+            "duration": duration,
+            "level": level,
+            "equipment": equipment,
+        }
+    else:
+        st.error("Aucun mouvement avec vidéo n’est disponible pour cette sélection.")
 
 workout = st.session_state.get("workout")
 
@@ -190,15 +211,13 @@ if workout:
     st.metric("Durée", f"{seconds} sec")
     st.info(instruction)
 
-    item = find_exercise(catalogue, api_name) if catalogue else None
+    item = find_exercise(catalogue, api_name)
     video_url = female_video(item)
 
     st.subheader("🎥 Suis le coach")
     if video_url:
         st.video(video_url, autoplay=True, loop=True, muted=True, width="stretch")
-        st.caption("Version féminine utilisée en priorité pour garder le rendu cohérent.")
-    else:
-        st.warning("Vidéo HD non trouvée pour ce mouvement dans le catalogue de test.")
+        st.caption("Même collection féminine HD utilisée pour toute la séance.")
 
     st.write(f"⏱️ Fais le mouvement pendant **{seconds} secondes**, puis passe au suivant.")
 
@@ -221,6 +240,4 @@ if workout:
         st.session_state["exercise_index"] = 0
         st.rerun()
 
-st.caption(
-    "Prototype HD — données chargées depuis le fichier statique GitHub, sans dépendance à l’ancienne API."
-)
+st.caption("Version HD — les mouvements sans vidéo sont automatiquement exclus.")
