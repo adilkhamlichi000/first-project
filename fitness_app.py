@@ -1,5 +1,4 @@
 import hmac
-from urllib.parse import quote_plus
 
 import streamlit as st
 
@@ -21,39 +20,12 @@ def check_password() -> bool:
     return False
 
 
-EXERCISES = {
-    "Échauffement": [
-        ("Marche dynamique", "Bouge les bras et monte progressivement le rythme.", "45 sec"),
-        ("Cercles de bras", "Petits puis grands cercles, épaules relâchées.", "30 sec"),
-        ("Montées de genoux douces", "Reste droit et garde un rythme confortable.", "30 sec"),
-    ],
-    "Renforcement": [
-        ("Squats", "Pieds largeur d’épaules, hanches vers l’arrière, poitrine haute.", "12 reps"),
-        ("Pompes inclinées", "Mains sur une table ou un canapé, corps gainé.", "10 reps"),
-        ("Fentes arrière", "Recule une jambe, descends doucement, alterne les côtés.", "10 / jambe"),
-        ("Pont fessier", "Allongé sur le dos, pousse les hanches vers le haut.", "15 reps"),
-        ("Planche", "Corps aligné, abdos serrés, respire normalement.", "30 sec"),
-        ("Bird-dog", "À quatre pattes, tends bras et jambe opposés.", "8 / côté"),
-    ],
-    "Cardio": [
-        ("Step touch", "Pas à droite puis à gauche, bras actifs.", "45 sec"),
-        ("Jumping jacks doux", "Sans saut si besoin : ouvre une jambe à la fois.", "30 sec"),
-        ("Mountain climbers lents", "Mains au sol ou sur un support, genoux alternés.", "30 sec"),
-        ("Shadow boxing", "Petits coups de poing contrôlés, buste gainé.", "45 sec"),
-    ],
-    "Mobilité": [
-        ("Cat-cow", "À quatre pattes, alterne dos rond et dos creux doucement.", "45 sec"),
-        ("Rotation thoracique", "À quatre pattes, ouvre un bras vers le plafond.", "8 / côté"),
-        ("Étirement des hanches", "Fente légère, bassin vers l’avant sans forcer.", "30 sec / côté"),
-        ("Étirement des ischios", "Jambe légèrement tendue, dos long, sans rebond.", "30 sec / côté"),
-    ],
-}
-
-
-# Démonstrations vidéo sélectionnées. Lorsqu'une vidéo directe n'est pas encore
-# sélectionnée, l'app propose automatiquement une recherche YouTube ciblée.
+# Chaque mouvement proposé dans l'app a maintenant une démonstration vidéo
+# intégrée. Les clips tournent en boucle directement dans Streamlit.
 EXERCISE_VIDEOS = {
+    "Cercles de bras": "https://www.youtube.com/watch?v=2yqZn9K5f4I",
     "Montées de genoux douces": "https://www.youtube.com/watch?v=OAJ_J3EZkdY",
+    "Step touch": "https://www.youtube.com/watch?v=wH9hsR7Ck_M",
     "Squats": "https://www.youtube.com/watch?v=aclHkVaku9U",
     "Pompes inclinées": "https://www.youtube.com/watch?v=Gvm5Q29UHbk",
     "Pont fessier": "https://www.youtube.com/watch?v=wPM8icPu6H8",
@@ -63,24 +35,63 @@ EXERCISE_VIDEOS = {
     "Mountain climbers lents": "https://www.youtube.com/watch?v=nmwgirgXLYM",
     "Shadow boxing": "https://www.youtube.com/watch?v=Q1Piq_vMh5g",
     "Cat-cow": "https://www.youtube.com/watch?v=MSBOBAIeLqI",
+    "Rotation thoracique": "https://www.youtube.com/watch?v=snzLuyYgbVI",
+    "Étirement des hanches": "https://www.youtube.com/watch?v=Uc6d-qOxI0c",
     "Étirement des ischios": "https://www.youtube.com/watch?v=vA6qj6suhN4",
     "Développé épaules avec haltères": "https://www.youtube.com/watch?v=qEwKCR5JCog",
     "Rowing avec haltères": "https://www.youtube.com/watch?v=roCP6wCXPqo",
-    "Étirement doux": "https://www.youtube.com/watch?v=eqVMAPM00DM",
+    "Respiration lente": "https://www.youtube.com/watch?v=Yjvwkde95w0",
+    "Étirement doux": "https://www.youtube.com/watch?v=4bxSqGW89YM",
 }
 
 
-def show_exercise_video(name: str):
-    st.subheader("🎥 Démonstration")
-    video_url = EXERCISE_VIDEOS.get(name)
+# nom, consigne, durée de base en secondes
+EXERCISES = {
+    "Échauffement": [
+        ("Step touch", "Pas à droite puis à gauche, bras actifs.", 40),
+        ("Cercles de bras", "Petits puis grands cercles, épaules relâchées.", 30),
+        ("Montées de genoux douces", "Reste droit et garde un rythme confortable.", 30),
+    ],
+    "Renforcement": [
+        ("Squats", "Pieds largeur d’épaules, hanches vers l’arrière, poitrine haute.", 40),
+        ("Pompes inclinées", "Mains sur une table ou un canapé, corps gainé.", 35),
+        ("Pont fessier", "Allongé sur le dos, pousse les hanches vers le haut.", 40),
+        ("Planche", "Corps aligné, abdos serrés, respire normalement.", 30),
+        ("Bird-dog", "À quatre pattes, tends bras et jambe opposés en alternance.", 40),
+    ],
+    "Cardio": [
+        ("Step touch", "Pas à droite puis à gauche, bras actifs.", 45),
+        ("Jumping jacks doux", "Sans saut si besoin : ouvre une jambe à la fois.", 35),
+        ("Mountain climbers lents", "Mains au sol ou sur un support, genoux alternés.", 35),
+        ("Shadow boxing", "Petits coups de poing contrôlés, buste gainé.", 45),
+    ],
+    "Mobilité": [
+        ("Cat-cow", "À quatre pattes, alterne dos rond et dos creux doucement.", 45),
+        ("Rotation thoracique", "À quatre pattes, ouvre le coude vers le plafond sans tourner les hanches.", 40),
+        ("Étirement des hanches", "Fente légère, bassin vers l’avant sans forcer.", 40),
+        ("Étirement des ischios", "Jambe légèrement tendue, dos long, sans rebond.", 40),
+    ],
+}
 
-    if video_url:
-        st.video(video_url)
-        return
 
-    query = quote_plus(f"{name} exercice démonstration technique")
-    search_url = f"https://www.youtube.com/results?search_query={query}"
-    st.link_button("▶️ Voir une démonstration vidéo", search_url, use_container_width=True)
+def adjusted_seconds(base_seconds: int, level: str) -> int:
+    if level == "Débutant":
+        return max(20, base_seconds - 5)
+    if level == "Avancé":
+        return base_seconds + 10
+    return base_seconds
+
+
+def show_exercise_video(name: str, seconds: int):
+    st.subheader("🎥 Suis le coach")
+    st.caption(f"La démonstration reste dans l’app et tourne en boucle pendant tes {seconds} secondes.")
+    st.video(
+        EXERCISE_VIDEOS[name],
+        loop=True,
+        autoplay=True,
+        muted=True,
+        width="stretch",
+    )
 
 
 def build_session(goal: str, duration: int, level: str, equipment: str):
@@ -98,8 +109,8 @@ def build_session(goal: str, duration: int, level: str, equipment: str):
 
     if equipment == "Haltères légers":
         pool = pool + [
-            ("Développé épaules avec haltères", "Pousse les haltères au-dessus de la tête sans cambrer.", "10 reps"),
-            ("Rowing avec haltères", "Buste légèrement penché, tire les coudes vers l’arrière.", "12 reps"),
+            ("Développé épaules avec haltères", "Pousse les haltères au-dessus de la tête sans cambrer.", 35),
+            ("Rowing avec haltères", "Buste légèrement penché, tire les coudes vers l’arrière.", 40),
         ]
 
     rounds = 1 if duration <= 15 else 2 if duration <= 30 else 3
@@ -112,14 +123,18 @@ def build_session(goal: str, duration: int, level: str, equipment: str):
         session.extend(pool)
 
     session.extend([
-        ("Respiration lente", "Inspire 4 secondes, expire 6 secondes.", "60 sec"),
-        ("Étirement doux", "Relâche jambes, dos et épaules sans forcer.", "60 sec"),
+        ("Respiration lente", "Inspire 4 secondes, expire 6 secondes.", 60),
+        ("Étirement doux", "Relâche jambes, dos et épaules sans forcer.", 60),
     ])
-    return session
+
+    return [
+        (name, instruction, adjusted_seconds(seconds, level))
+        for name, instruction, seconds in session
+    ]
 
 
 st.title("💪 Fitness Coach")
-st.caption("Des séances simples et guidées sur ton téléphone")
+st.caption("Un coach vidéo directement dans ton téléphone")
 
 if not check_password():
     st.stop()
@@ -153,9 +168,8 @@ if st.button("Créer la séance", type="primary", use_container_width=True):
 workout = st.session_state.get("workout")
 
 if workout:
-    idx = st.session_state.get("exercise_index", 0)
-    idx = min(idx, len(workout) - 1)
-    name, instruction, target = workout[idx]
+    idx = min(st.session_state.get("exercise_index", 0), len(workout) - 1)
+    name, instruction, seconds = workout[idx]
     meta = st.session_state.get("workout_meta", {})
 
     st.divider()
@@ -165,10 +179,12 @@ if workout:
     st.progress((idx + 1) / len(workout))
     st.write(f"Exercice {idx + 1} sur {len(workout)}")
     st.header(name)
-    st.metric("Objectif", target)
+    st.metric("Durée", f"{seconds} sec")
     st.info(instruction)
 
-    show_exercise_video(name)
+    show_exercise_video(name, seconds)
+
+    st.write(f"⏱️ Fais le mouvement pendant **{seconds} secondes**, puis passe au suivant.")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -189,4 +205,4 @@ if workout:
         st.session_state["exercise_index"] = 0
         st.rerun()
 
-st.caption("Version 2 — démonstrations vidéo, sans API OpenAI, donc aucun coût d’utilisation.")
+st.caption("Version 3 — vidéos intégrées et bouclées dans l’app, sans coût OpenAI.")
