@@ -1,4 +1,5 @@
 import hmac
+from urllib.parse import quote_plus
 
 import streamlit as st
 
@@ -47,6 +48,39 @@ EXERCISES = {
         ("Étirement des ischios", "Jambe légèrement tendue, dos long, sans rebond.", "30 sec / côté"),
     ],
 }
+
+
+# Démonstrations vidéo sélectionnées. Lorsqu'une vidéo directe n'est pas encore
+# sélectionnée, l'app propose automatiquement une recherche YouTube ciblée.
+EXERCISE_VIDEOS = {
+    "Montées de genoux douces": "https://www.youtube.com/watch?v=OAJ_J3EZkdY",
+    "Squats": "https://www.youtube.com/watch?v=aclHkVaku9U",
+    "Pompes inclinées": "https://www.youtube.com/watch?v=Gvm5Q29UHbk",
+    "Pont fessier": "https://www.youtube.com/watch?v=wPM8icPu6H8",
+    "Planche": "https://www.youtube.com/watch?v=DjEN3SKl0Eg",
+    "Bird-dog": "https://www.youtube.com/watch?v=ZdAHe9_HeEw",
+    "Jumping jacks doux": "https://www.youtube.com/watch?v=c4DAnQ6DtF8",
+    "Mountain climbers lents": "https://www.youtube.com/watch?v=nmwgirgXLYM",
+    "Shadow boxing": "https://www.youtube.com/watch?v=Q1Piq_vMh5g",
+    "Cat-cow": "https://www.youtube.com/watch?v=MSBOBAIeLqI",
+    "Étirement des ischios": "https://www.youtube.com/watch?v=vA6qj6suhN4",
+    "Développé épaules avec haltères": "https://www.youtube.com/watch?v=qEwKCR5JCog",
+    "Rowing avec haltères": "https://www.youtube.com/watch?v=roCP6wCXPqo",
+    "Étirement doux": "https://www.youtube.com/watch?v=eqVMAPM00DM",
+}
+
+
+def show_exercise_video(name: str):
+    st.subheader("🎥 Démonstration")
+    video_url = EXERCISE_VIDEOS.get(name)
+
+    if video_url:
+        st.video(video_url)
+        return
+
+    query = quote_plus(f"{name} exercice démonstration technique")
+    search_url = f"https://www.youtube.com/results?search_query={query}"
+    st.link_button("▶️ Voir une démonstration vidéo", search_url, use_container_width=True)
 
 
 def build_session(goal: str, duration: int, level: str, equipment: str):
@@ -134,6 +168,8 @@ if workout:
     st.metric("Objectif", target)
     st.info(instruction)
 
+    show_exercise_video(name)
+
     col1, col2 = st.columns(2)
     with col1:
         if st.button("⬅️ Précédent", use_container_width=True, disabled=idx == 0):
@@ -153,4 +189,4 @@ if workout:
         st.session_state["exercise_index"] = 0
         st.rerun()
 
-st.caption("Version 1 — sans API OpenAI, donc aucun coût d’utilisation.")
+st.caption("Version 2 — démonstrations vidéo, sans API OpenAI, donc aucun coût d’utilisation.")
