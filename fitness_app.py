@@ -9,7 +9,8 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Fitness Coach", page_icon="💪", layout="centered")
 
 GIF_BASE = "https://raw.githubusercontent.com/mohamedatef90/exercise-library/main/gifs/"
-MUSIC_URL = "https://upload.wikimedia.org/wikipedia/commons/0/09/Guillaume_Tell_-_Overture_-_%28Rossini%2C_Gioacchino%29_by_Fritz_Reiner_%28conductor%29.mp3"
+# Hype Energy — The_Mountain, Pixabay Content License.
+MUSIC_URL = "https://pixabay.com/music/download/id-171614.mp3"
 
 
 def check_password() -> bool:
@@ -112,7 +113,6 @@ def coach_text(exercise):
 
 
 def install_start_audio(first_exercise):
-    """Démarre musique + première consigne pendant le clic Créer la séance."""
     text = json.dumps(coach_text(first_exercise), ensure_ascii=False)
     music_url = json.dumps(MUSIC_URL)
 
@@ -122,6 +122,10 @@ def install_start_audio(first_exercise):
         (() => {{
           const P = window.parent;
           const D = P.document;
+
+          function isMuted() {{
+            return localStorage.getItem('fitnessMuted') === '1';
+          }}
 
           function getMusic() {{
             let audio = D.getElementById('fitnessGlobalMusic');
@@ -133,13 +137,14 @@ def install_start_audio(first_exercise):
               audio.preload = 'auto';
               audio.playsInline = true;
               audio.style.display = 'none';
-              audio.volume = 0.08;
               D.body.appendChild(audio);
             }}
+            audio.volume = 0.16;
             return audio;
           }}
 
           function speak(text) {{
+            if (isMuted()) return;
             try {{
               const synth = P.speechSynthesis;
               if (!synth || !P.SpeechSynthesisUtterance) return;
@@ -153,16 +158,14 @@ def install_start_audio(first_exercise):
               const fr = voices.find(v => (v.lang || '').toLowerCase().startsWith('fr'));
               if (fr) u.voice = fr;
               const music = getMusic();
-              u.onstart = () => {{ music.volume = 0.025; }};
-              u.onend = () => {{ music.volume = 0.08; }};
-              u.onerror = () => {{ music.volume = 0.08; }};
+              u.onstart = () => {{ music.volume = 0.045; }};
+              u.onend = () => {{ if (!isMuted()) music.volume = 0.16; }};
+              u.onerror = () => {{ if (!isMuted()) music.volume = 0.16; }};
               synth.speak(u);
             }} catch (e) {{}}
           }}
 
-          if (P.__fitnessStartHandler) {{
-            D.removeEventListener('click', P.__fitnessStartHandler, true);
-          }}
+          if (P.__fitnessStartHandler) D.removeEventListener('click', P.__fitnessStartHandler, true);
 
           P.__fitnessStartHandler = (event) => {{
             const button = event.target.closest ? event.target.closest('button') : null;
@@ -170,7 +173,10 @@ def install_start_audio(first_exercise):
             const label = (button.innerText || button.textContent || '').trim();
             if (!label.includes('Créer la séance')) return;
 
+            localStorage.setItem('fitnessMuted', '0');
             const music = getMusic();
+            music.currentTime = 0;
+            music.volume = 0.16;
             music.play().catch(() => {{}});
             P.__fitnessSessionActive = true;
             speak({text});
@@ -185,19 +191,15 @@ def install_start_audio(first_exercise):
 
 
 def install_navigation_audio(workout, idx):
-    """Lit la prochaine/précédente consigne pendant le clic, avant le rerun Streamlit."""
     current = coach_text(workout[idx])
     next_text = coach_text(workout[idx + 1]) if idx + 1 < len(workout) else "Séance terminée. Bravo."
     previous_text = coach_text(workout[idx - 1]) if idx > 0 else current
     first_text = coach_text(workout[0])
 
-    payload = {
-        "current": current,
-        "next": next_text,
-        "previous": previous_text,
-        "first": first_text,
-    }
-    safe = json.dumps(payload, ensure_ascii=False)
+    safe = json.dumps(
+        {"current": current, "next": next_text, "previous": previous_text, "first": first_text},
+        ensure_ascii=False,
+    )
     music_url = json.dumps(MUSIC_URL)
 
     components.html(
@@ -207,6 +209,10 @@ def install_navigation_audio(workout, idx):
           const P = window.parent;
           const D = P.document;
           const texts = {safe};
+
+          function isMuted() {{
+            return localStorage.getItem('fitnessMuted') === '1';
+          }}
 
           function getMusic() {{
             let audio = D.getElementById('fitnessGlobalMusic');
@@ -218,13 +224,13 @@ def install_navigation_audio(workout, idx):
               audio.preload = 'auto';
               audio.playsInline = true;
               audio.style.display = 'none';
-              audio.volume = 0.08;
               D.body.appendChild(audio);
             }}
             return audio;
           }}
 
           function speak(text) {{
+            if (isMuted()) return;
             try {{
               const synth = P.speechSynthesis;
               if (!synth || !P.SpeechSynthesisUtterance) return;
@@ -238,19 +244,21 @@ def install_navigation_audio(workout, idx):
               const fr = voices.find(v => (v.lang || '').toLowerCase().startsWith('fr'));
               if (fr) u.voice = fr;
               const music = getMusic();
-              u.onstart = () => {{ music.volume = 0.025; }};
-              u.onend = () => {{ music.volume = 0.08; }};
-              u.onerror = () => {{ music.volume = 0.08; }};
+              u.onstart = () => {{ music.volume = 0.045; }};
+              u.onend = () => {{ if (!isMuted()) music.volume = 0.16; }};
+              u.onerror = () => {{ if (!isMuted()) music.volume = 0.16; }};
               synth.speak(u);
             }} catch (e) {{}}
           }}
 
           const music = getMusic();
-          if (P.__fitnessSessionActive) music.play().catch(() => {{}});
-
-          if (P.__fitnessNavHandler) {{
-            D.removeEventListener('click', P.__fitnessNavHandler, true);
+          if (P.__fitnessSessionActive && !isMuted()) {{
+            music.volume = 0.16;
+            music.play().catch(() => {{}});
           }}
+
+          if (P.__fitnessNavHandler) D.removeEventListener('click', P.__fitnessNavHandler, true);
+          if (P.__fitnessSoundHandler) D.removeEventListener('click', P.__fitnessSoundHandler, true);
 
           P.__fitnessNavHandler = (event) => {{
             const button = event.target.closest ? event.target.closest('button') : null;
@@ -262,7 +270,25 @@ def install_navigation_audio(workout, idx):
             else if (label.includes('Recommencer')) speak(texts.first);
           }};
 
+          P.__fitnessSoundHandler = (event) => {{
+            const button = event.target.closest ? event.target.closest('button') : null;
+            if (!button) return;
+            const label = (button.innerText || button.textContent || '').trim();
+            const music = getMusic();
+
+            if (label.includes('Couper le son')) {{
+              localStorage.setItem('fitnessMuted', '1');
+              music.pause();
+              try {{ P.speechSynthesis.cancel(); }} catch (e) {{}}
+            }} else if (label.includes('Remettre le son')) {{
+              localStorage.setItem('fitnessMuted', '0');
+              music.volume = 0.16;
+              music.play().catch(() => {{}});
+            }}
+          }};
+
           D.addEventListener('click', P.__fitnessNavHandler, true);
+          D.addEventListener('click', P.__fitnessSoundHandler, true);
         }})();
         </script>
         """,
@@ -271,7 +297,7 @@ def install_navigation_audio(workout, idx):
 
 
 st.title("💪 Fitness Coach")
-st.caption("Démonstrations animées + musique automatique + coach vocal français")
+st.caption("Démonstrations animées + Hype Energy + coach vocal français")
 
 if not check_password():
     st.stop()
@@ -291,7 +317,6 @@ level = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Avancé"])
 duration = st.select_slider("Durée", options=[10, 15, 20, 30, 45], value=20, format_func=lambda x: f"{x} min")
 equipment = st.selectbox("Matériel", ["Aucun", "Haltères légers"])
 
-# Le premier message vocal est préparé AVANT le bouton : le clic lui-même autorise le son sur iPhone.
 preview_workout = build_session(goal, duration, level, equipment)
 install_start_audio(preview_workout[0])
 
@@ -304,6 +329,7 @@ if st.button("Créer la séance", type="primary", use_container_width=True):
         st.session_state["workout"] = workout
         st.session_state["exercise_index"] = first_idx
         st.session_state["current_gif"] = first_gif
+        st.session_state["sound_enabled"] = True
         st.session_state["workout_meta"] = {
             "goal": goal,
             "duration": duration,
@@ -331,6 +357,12 @@ if workout:
         st.stop()
 
     install_navigation_audio(workout, idx)
+
+    sound_enabled = st.session_state.get("sound_enabled", True)
+    sound_label = "🔇 Couper le son" if sound_enabled else "🔊 Remettre le son"
+    if st.button(sound_label, use_container_width=True):
+        st.session_state["sound_enabled"] = not sound_enabled
+        st.rerun()
 
     st.divider()
     st.caption(
@@ -380,4 +412,4 @@ if workout:
             st.session_state["current_gif"] = first_gif
             st.rerun()
 
-st.caption("Musique : Rossini — Ouverture de Guillaume Tell, source Wikimedia Commons (CC BY-SA 4.0).")
+st.caption("Musique : Hype Energy — The_Mountain, Pixabay Content License.")
